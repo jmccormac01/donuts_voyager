@@ -92,8 +92,12 @@ class Voyager():
         """
         Receive a message of n_bytes in length from Voyager
         """
-        return self.socket.recv(n_bytes)
-
+        try:
+            message = self.socket.recv(n_bytes)
+        except s.timeout:
+            message = ""
+            print("Socket receive timeout, continuing...")
+        return message
 
     def __polling_str(self):
         """
