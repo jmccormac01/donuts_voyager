@@ -24,9 +24,9 @@ class Voyager():
         self.inst = 1
 
         # set up the main polling thread
-        #main_thread = threading.Thread(target=self.establish_and_maintain_voyager_connection)
-        #main_thread.daemon = True
-        #main_thread.start()
+        main_thread = threading.Thread(target=self.establish_and_maintain_voyager_connection)
+        main_thread.daemon = True
+        main_thread.start()
 
         # set up the guiding thread
         #self._guide_condition = threading.Condition()
