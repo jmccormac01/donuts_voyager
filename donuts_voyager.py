@@ -29,6 +29,7 @@ class Voyager():
                                        args=(time_to_die, ))
         main_thread.daemon = True
         main_thread.start()
+        time_to_die.wait()
 
         # set up the guiding thread
         #self._guide_condition = threading.Condition()
