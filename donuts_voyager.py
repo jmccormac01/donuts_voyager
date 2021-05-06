@@ -24,41 +24,34 @@ class Voyager():
         self.inst = 1
 
         # set up the main polling thread
-        time_to_die = threading.Event()
-        main_thread = threading.Thread(target=self.establish_and_maintain_voyager_connection,
-                                       args=(time_to_die, ))
+        main_thread = threading.Thread(target=self.establish_and_maintain_voyager_connection)
         main_thread.daemon = True
         main_thread.start()
-        time_to_die.wait()
 
         # set up the guiding thread
         #self._guide_condition = threading.Condition()
         #self._guide_latest_frame = None
         # guide_thread = threading.Thread(target=self.__analyse_latest_image)
 
-    def establish_and_maintain_voyager_connection(self, time_to_die):
+    def establish_and_maintain_voyager_connection(self):
         """
         Open a connection and maintain it with Voyager
         """
-        while not time_to_die.is_set():
-            self.__open_socket()
+        self.__open_socket()
 
-            while 1:
-                # keep it alive and listen for jobs
-                polling_str = self.__polling_str()
-                sent = self.__send(polling_str)
-                if sent:
-                    print(f"SENT: {polling_str}")
+        while 1:
+            # keep it alive and listen for jobs
+            polling_str = self.__polling_str()
+            sent = self.__send(polling_str)
+            if sent:
+                print(f"SENT: {polling_str}")
 
-                # listen for a response
-                rec = self.__receive()
-                if rec:
-                    print(f"RECEIVED: {rec}")
+            # listen for a response
+            rec = self.__receive()
+            if rec:
+                print(f"RECEIVED: {rec}")
 
-                time.sleep(1)
-
-        # close the socket when finished
-        self.__close_socket()
+            time.sleep(1)
 
     def __open_socket(self):
         """
@@ -123,10 +116,5 @@ if __name__ == "__main__":
     config = {'socket_ip': '127.0.0.1',
               'socket_port': 5950,
               'host': 'DESKTOP-CNTF3JR'}
-    try:
-        voyager = Voyager(config)
-    except KeyboardInterrupt:
-        print('Caught ctrl+c, ending...')
-        voyager.time_to_die.set()
-        sys.exit(1)
 
+    voyager = Voyager(config)
