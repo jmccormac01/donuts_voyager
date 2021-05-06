@@ -24,16 +24,11 @@ class Voyager():
         self.inst = 1
 
         # set up the main polling thread
-        try:
-            time_to_die = threading.Event()
-            main_thread = threading.Thread(target=self.establish_and_maintain_voyager_connection,
-                                           args=(time_to_die, ))
-            main_thread.daemon = True
-            main_thread.start()
-        except KeyboardInterrupt:
-            print('Caught ctrl+c, ending...')
-            time_to_die.set()
-            sys.exit(1)
+        time_to_die = threading.Event()
+        main_thread = threading.Thread(target=self.establish_and_maintain_voyager_connection,
+                                       args=(time_to_die, ))
+        main_thread.daemon = True
+        main_thread.start()
 
         # set up the guiding thread
         #self._guide_condition = threading.Condition()
@@ -127,6 +122,10 @@ if __name__ == "__main__":
     config = {'socket_ip': '127.0.0.1',
               'socket_port': 5950,
               'host': 'DESKTOP-CNTF3JR'}
-    
-    voyager = Voyager(config)
+    try:
+        voyager = Voyager(config)
+    except KeyboardInterrupt:
+        print('Caught ctrl+c, ending...')
+        voyager.time_to_die.set()
+        sys.exit(1)
 
