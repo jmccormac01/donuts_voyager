@@ -83,12 +83,11 @@ class Voyager():
                 self.__keep_socket_alive()
 
             # here we pass on any communication to Voyager
-            elif not commands.empty():
-                while not commands.empty():
-                    next_command = commands.get()
-                    sent = self.__send(next_command)
-                    if sent:
-                        print(f"SENT: {next_command}")
+            while not commands.empty():
+                next_command = commands.get()
+                sent = self.__send(next_command)
+                if sent:
+                    print(f"SENT: {next_command}")
 
 
             #time.sleep(1)
