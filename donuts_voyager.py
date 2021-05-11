@@ -80,7 +80,6 @@ class Voyager():
                         pass
 
                     elif rec['Event'] == "DonutsCalibrationRequired":
-                        print("Do donuts calibration")
                         # send a dummy command with a small delay for now
                         self._status = DonutsStatus.CALIBRATING
                         self.__send_donuts_message_to_voyager("DonutsCalibrationStart")
@@ -89,7 +88,6 @@ class Voyager():
                         self._status = DonutsStatus.IDLE
 
                     elif rec['Event'] == "DonutsRecenterRequired":
-                        print("Do donuts recentering")
                         # if guider is IDLE, do stuff, otherwise do nothing
                         if self._status == DonutsStatus.IDLE:
                             # set the current mode to guiding
@@ -159,15 +157,6 @@ class Voyager():
                 # ping the keep alive
                 self.__keep_socket_alive()
 
-            # here we pass on any communication to Voyager
-            #while not self._to_voyager.empty():
-            #    next_command = self._to_voyager.get()
-            #    sent = self.__send(next_command)
-            #    if sent:
-            #        print(f"SENT: {next_command}")
-
-            #time.sleep(1)
-
     def __guide_loop(self):
         """
         Analyse incoming images for guiding offsets
@@ -233,7 +222,7 @@ class Voyager():
             message = json.loads(self.socket.recv(n_bytes))
         except s.timeout:
             message = {}
-            print("Socket receive timeout, continuing...")
+            #print("Socket receive timeout, continuing...")
         return message
 
     def __keep_socket_alive(self):
@@ -245,11 +234,12 @@ class Voyager():
                    "Timestamp": now,
                    "Host": self.host,
                    "Inst": self.inst}
-        #polling_str = f"{{\"Event\":\"Polling\",\"Timestamp\":{now},\"Host\":\"{self.host}\",\"Inst\":{self.inst}}}\r\n"
+
+        # send the polling string
         polling_str = json.dumps(polling) + "\r\n"
         sent = self.__send(polling_str)
         if sent:
-            print(f"SENT: {polling_str}")
+            print(f"SENT: {polling_str.rstrip()}")
         self.last_poll_time = time.time()
 
     def __send_donuts_message_to_voyager(self, event, error=None):
@@ -264,19 +254,11 @@ class Voyager():
         if error is not None:
             message['DonutsError'] = error
 
-        print(message)
-
-        msg_str = json.dumps(message) + "\r\n"
-
-        #if error is None:
-        #    msg = f"{{\"Event\":\"{event}\",\"Timestamp\":{now},\"Host\":\"{self.host}\",\"Inst\":{self.inst}}}\r\n"
-        #else:
-        #    msg = f"{{\"Event\":\"{event}\",\"Timestamp\":{now},\"Host\":\"{self.host}\",\"Inst\":{self.inst},\"DonutsError\":\"{error}\"}}\r\n"
-
         # send the command
+        msg_str = json.dumps(message) + "\r\n"
         sent = self.__send(msg_str)
         if sent:
-            print(f"SENT: {msg_str}")
+            print(f"SENT: {msg_str.rstrip()}")
         self.last_poll_time = time.time()
 
     def __send_voyager_pulse_guide(self, uid, idd, direction, duration):
@@ -295,33 +277,33 @@ class Voyager():
         # send the command
         sent = self.__send(msg_str)
         if sent:
-            print(f"SENT: {msg_str}")
+            print(f"SENT: {msg_str.rstrip()}")
         self.last_poll_time = time.time()
 
-    def __image_str(self, exptime):
-        """
-        Create a string for taking an image
-        """
-        image_dict = {"method": "RemoteCameraShot",
-                      "params": {"UID": "eaea5429-f5a9-4012-bc9b-f109e605f5d8",
-                                 "Expo": f"{exptime}",
-                                 "Bin": 1,
-                                 "IsROI": "false",
-                                 "ROITYPE": 0,
-                                 "ROIX": 0,
-                                 "ROIY": 0,
-                                 "ROIDX": 0,
-                                 "ROIDY": 0,
-                                 "FilterIndex": 0,
-                                 "ExpoType": 0,
-                                 "SpeedIndex": 0,
-                                 "ReadoutIndex": 0,
-                                 "IsSaveFile": "false",
-                                 "FitFileName": "",
-                                 "Gain": 1,
-                                 "Offset": 0},
-                      "id": self.image_id}
-        return json.dumps(image_dict)
+    #def __image_str(self, exptime):
+    #    """
+    #    Create a string for taking an image
+    #    """
+    #    image_dict = {"method": "RemoteCameraShot",
+    #                  "params": {"UID": "eaea5429-f5a9-4012-bc9b-f109e605f5d8",
+    #                             "Expo": f"{exptime}",
+    #                             "Bin": 1,
+    #                             "IsROI": "false",
+    #                             "ROITYPE": 0,
+    #                             "ROIX": 0,
+    #                             "ROIY": 0,
+    #                             "ROIDX": 0,
+    #                             "ROIDY": 0,
+    #                             "FilterIndex": 0,
+    #                             "ExpoType": 0,
+    #                             "SpeedIndex": 0,
+    #                             "ReadoutIndex": 0,
+    #                             "IsSaveFile": "false",
+    #                             "FitFileName": "",
+    #                             "Gain": 1,
+    #                             "Offset": 0},
+    #                  "id": self.image_id}
+    #    return json.dumps(image_dict)
 
 if __name__ == "__main__":
 
