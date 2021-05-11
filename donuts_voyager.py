@@ -60,6 +60,21 @@ class Voyager():
             if rec:
                 print(f"RECEIVED: {rec}")
 
+                if rec['Event'] == "Polling":
+                    pass
+                elif rec['Event'] == "DonutsCalibrationRequired":
+                    print("Do donuts calibration")
+                    pass
+                elif rec['Event'] == "DonutsRecenterRequired":
+                    print("Do donuts recentering")
+                    pass
+                elif rec['Event'] == "DonutsAbort":
+                    print("Donuts abort requested, dying peacefully")
+                    sys.exit(0)
+                else:
+                    print('Oh dear, something unforseen has occurred...')
+                    pass
+
                 # TODO: dispatch jobs here!
                 # NOTE: donuts calibration:
                 #       1. SEND calibration start
@@ -133,9 +148,9 @@ class Voyager():
         Receive a message of n_bytes in length from Voyager
         """
         try:
-            message = self.socket.recv(n_bytes)
+            message = json.loads(self.socket.recv(n_bytes))
         except s.timeout:
-            message = ""
+            message = {}
             print("Socket receive timeout, continuing...")
         return message
 
