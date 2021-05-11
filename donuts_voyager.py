@@ -133,8 +133,6 @@ class Voyager():
 
                     elif rec['Event'] == "DonutsAbort":
                         print("Donuts abort requested, dying peacefully")
-                        # stop the guide thread
-                        guide_thread.stop()
                         # close the socket
                         self.__close_socket()
                         # exit
