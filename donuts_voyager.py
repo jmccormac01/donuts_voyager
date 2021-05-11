@@ -83,9 +83,9 @@ class Voyager():
                         print("Do donuts calibration")
                         # send a dummy command with a small delay for now
                         self._status = DonutsStatus.CALIBRATING
-                        self.__send_donuts_message_to_voyager(self, "DonutsCalibrationStart")
+                        self.__send_donuts_message_to_voyager("DonutsCalibrationStart")
                         time.sleep(5)
-                        self.__send_donuts_message_to_voyager(self, "DonutsCalibrationDone")
+                        self.__send_donuts_message_to_voyager("DonutsCalibrationDone")
                         self._status = DonutsStatus.IDLE
 
                     elif rec['Event'] == "DonutsRecenterRequired":
@@ -95,7 +95,7 @@ class Voyager():
                             # set the current mode to guiding
                             self._status = DonutsStatus.GUIDING
                             # send a DonutsRecenterStart reply
-                            self.__send_donuts_message_to_voyager(self, "DonutsRecenterStart")
+                            self.__send_donuts_message_to_voyager("DonutsRecenterStart")
 
                             # keep a local copy of the image to guide on's path
                             last_image = rec['FitPathAndName']
@@ -119,10 +119,10 @@ class Voyager():
                                 self.image_id += 1
 
                                 # send a DonutsRecenterDone message
-                                self.__send_donuts_message_to_voyager(self, "DonutsRecenterDone")
+                                self.__send_donuts_message_to_voyager("DonutsRecenterDone")
                             except:
                                 # send a recentering error
-                                self.__send_donuts_message_to_voyager(self, "DonutsRecenterError", f"Failed to PulseGuide {last_image}")
+                                self.__send_donuts_message_to_voyager("DonutsRecenterError", f"Failed to PulseGuide {last_image}")
 
                             # set the current mode back to IDLE
                             self._status = DonutsStatus.IDLE
@@ -130,8 +130,8 @@ class Voyager():
                         else:
                             print("WARNING: Donuts is busy, skipping...")
                             # send Voyager a start and a done command to keep it happy
-                            self.__send_donuts_message_to_voyager(self, "DonutsRecenterStart")
-                            self.__send_donuts_message_to_voyager(self, "DonutsRecenterDone")
+                            self.__send_donuts_message_to_voyager("DonutsRecenterStart")
+                            self.__send_donuts_message_to_voyager("DonutsRecenterDone")
 
                     elif rec['Event'] == "DonutsAbort":
                         print("Donuts abort requested, dying peacefully")
