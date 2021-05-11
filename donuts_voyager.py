@@ -264,6 +264,8 @@ class Voyager():
         if error is not None:
             message['DonutsError'] = error
 
+        print(message)
+
         msg_str = json.dumps(message) + "\r\n"
 
         #if error is None:
