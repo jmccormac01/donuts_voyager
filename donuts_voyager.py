@@ -75,7 +75,6 @@ class Voyager():
             # listen for a response or a new job to do
             rec = self.__receive()
             if rec:
-                print(f"RECEIVED: {rec}")
 
                 # handle events
                 if 'Event' in rec.keys():
