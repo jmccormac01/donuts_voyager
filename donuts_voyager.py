@@ -153,6 +153,12 @@ class Voyager():
                             direction, duration = self._results_queue.get()
                             print(f"CORRECTION: {direction['x']}:{duration['x']} {direction['y']}:{duration['y']}")
 
+                            # send a DonutsRecenterDone message
+                            self.__send_donuts_message_to_voyager("DonutsRecenterDone")
+
+                            # The hope is pule guide can be applied after the DonutsRecenterDone command
+                            # it doesn't seem possible to send it while it's waiting
+
                             # send a pulseGuide command followed by a loop for responses
                             # this must be done before the next command can be sent
                             # if both are sent ok, we send the DonutsRecenterDone, otherwise we send an error
@@ -167,10 +173,9 @@ class Voyager():
                                 self.__send_voyager_pulse_guide(uuid_y, self._comms_id, direction['y'], duration['y'])
                                 self._comms_id += 1
 
-                                # send a DonutsRecenterDone message
-                                self.__send_donuts_message_to_voyager("DonutsRecenterDone")
                             except Exception:
                                 # send a recentering error
+                                # TODO: if the above works, need to move recentering error exception to a new place
                                 self.__send_donuts_message_to_voyager("DonutsRecenterError", f"Failed to PulseGuide {last_image}")
                                 traceback.print_exc()
 
@@ -377,20 +382,18 @@ class Voyager():
         # initialise an empty response class
         response = Response(uid, idd)
 
-        # loop until both responses are received
-        cb_loop_count = 0
-
-        #while not response.uid_recv:
-
-        # SEND command tp pulse guide
         # try sending the message and then waiting for a response
-        while not response.idd_recv:
+        sent = False
+        while not sent:
             # send the command
             sent = self.__send(msg_str)
             if sent:
                 print(f"SENT: {msg_str.rstrip()}")
                 print(f"CALLBACK ADD: {uid}:{idd}")
 
+        # loop until both responses are received
+        cb_loop_count = 0
+        while not response.uid_recv and not response.idd_recv:
             print(f"CALLBACK LOOP [{cb_loop_count+1}]: {uid}:{idd}")
             rec = self.__receive()
 
@@ -412,31 +415,31 @@ class Voyager():
                 else:
                     print(f"WARNING: Waiting for idd: {idd}, ignoring response for idd: {rec_idd}")
 
-        #    # handle the RemoteActionResult response (2 of 2 needed)
-        #    if "RemoteActionResult" in rec.keys():
-        #        print(f"RECEIVED: {rec}")
-        #        rec_uid, result, *_ = self.__parse_remote_action_result(rec)
-        #
-        #        # check we have a response for the thing we want
-        #        if rec_uid == uid:
-        #            # result = 4 means OK, anything else is an issue
-        #            if result != 4:
-        #                print(f"ERROR: Problem with command uid: {uid}")
-        #                print(f"ERROR: {rec}")
-        #            else:
-        #                print(f"OK: Command uid: {uid} returned correctly")
-        #                # add the response, regardless if it's good or bad, so we can end this loop
-        #                response.uid_received(result)
-        #        else:
-        #            print(f"WARNING: Waiting for uid: {uid}, ignoring response for uid: {rec_uid}")
-        #
-        #    else:
-        #        print(f"WARNING: Unknown response {rec}")
+            # handle the RemoteActionResult response (2 of 2 needed)
+            elif "RemoteActionResult" in rec.keys():
+                print(f"RECEIVED: {rec}")
+                rec_uid, result, *_ = self.__parse_remote_action_result(rec)
 
-        #cb_loop_count += 1
-        #if cb_loop_count > self._CB_LOOP_LIMIT:
-        #    print(f"No response in {cb_loop_count} tries, breaking...")
-        #    break
+                # check we have a response for the thing we want
+                if rec_uid == uid:
+                    # result = 4 means OK, anything else is an issue
+                    if result != 4:
+                        print(f"ERROR: Problem with command uid: {uid}")
+                        print(f"ERROR: {rec}")
+                    else:
+                        print(f"OK: Command uid: {uid} returned correctly")
+                        # add the response, regardless if it's good or bad, so we can end this loop
+                        response.uid_received(result)
+                else:
+                    print(f"WARNING: Waiting for uid: {uid}, ignoring response for uid: {rec_uid}")
+
+            else:
+                print(f"WARNING: Unknown response {rec}")
+
+            #cb_loop_count += 1
+            #if cb_loop_count > self._CB_LOOP_LIMIT:
+            #    print(f"No response in {cb_loop_count} tries, breaking...")
+            #    break
 
             # keep the connection alive while waiting
             now = time.time()
@@ -444,6 +447,7 @@ class Voyager():
             if time_since_last_poll > 5:
                 # ping the keep alive
                 self.__keep_socket_alive()
+
 
         # check was everything ok and raise an exception if not
         if not response.all_ok():
