@@ -153,9 +153,6 @@ class Voyager():
                             direction, duration = self._results_queue.get()
                             print(f"CORRECTION: {direction['x']}:{duration['x']} {direction['y']}:{duration['y']}")
 
-                            # send a DonutsRecenterDone message
-                            self.__send_donuts_message_to_voyager("DonutsRecenterDone")
-
                             # The hope is pule guide can be applied after the DonutsRecenterDone command
                             # it doesn't seem possible to send it while it's waiting
 
@@ -173,9 +170,10 @@ class Voyager():
                                 self.__send_voyager_pulse_guide(uuid_y, self._comms_id, direction['y'], duration['y'])
                                 self._comms_id += 1
 
+                                # send a DonutsRecenterDone message
+                                self.__send_donuts_message_to_voyager("DonutsRecenterDone")
                             except Exception:
                                 # send a recentering error
-                                # TODO: if the above works, need to move recentering error exception to a new place
                                 self.__send_donuts_message_to_voyager("DonutsRecenterError", f"Failed to PulseGuide {last_image}")
                                 traceback.print_exc()
 
