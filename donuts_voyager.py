@@ -14,12 +14,50 @@ import numpy as np
 # TODO: add logging
 
 # pylint: disable=line-too-long
+# pylint: disable=invalid-name
 
 class DonutsStatus():
     """
     Current status of Donuts guiding
     """
     CALIBRATING, GUIDING, IDLE, UNKNOWN = np.arange(4)
+
+class Response():
+    """
+    Keep track of outstanding responses from Voyager
+    """
+    def __init__(self, uid, idd):
+        """
+        Initialise response object
+        """
+        self.uid = uid
+        self.idd = idd
+        self.uid_recv = False
+        self.idd_recv = False
+        self.uid_status = None
+        self.idd_status = None
+
+    def uid_received(self, status):
+        """
+        Update uuid response as received
+        """
+        self.uid_recv = True
+        self.uid_status = status
+
+    def idd_received(self, status):
+        """
+        Update uuid response as received
+        """
+        self.idd_recv = True
+        self.idd_status = status
+
+    def all_ok(self):
+        """
+        Check if uid and idd are all ok
+        Return True if so and False if not
+        """
+        return self.uid_recv and self.idd_recv and \
+               self.uid_status == 4 and self.idd_status == 0
 
 class Voyager():
     """
@@ -36,14 +74,15 @@ class Voyager():
         self.inst = 1
 
         # Fits image path keyword
-        self.voyager_path_keyword = "FITPathAndName"
+        self._voyager_path_keyword = "FITPathAndName"
         self._INFO_SIGNALS = ["Polling", "Version", "Signal"]
 
         # keep track of current status
         self._status = DonutsStatus.UNKNOWN
 
-        self.image_id = 0
-        self.last_poll_time = None
+        self._image_id = 0
+        self._comms_id = 0
+        self._last_poll_time = None
 
         # set up the guiding thread
         self._latest_guide_frame = None
@@ -51,6 +90,9 @@ class Voyager():
 
         # set up a queue to send back results from guide_loop
         self._results_queue = queue.Queue(maxsize=1)
+
+        # set up some callback parameters
+        self.CB_LOOP_LIMIT = 10
 
     def run(self):
         """
@@ -100,31 +142,37 @@ class Voyager():
                             self.__send_donuts_message_to_voyager("DonutsRecenterStart")
 
                             # keep a local copy of the image to guide on's path
-                            last_image = rec[self.voyager_path_keyword]
+                            last_image = rec[self._voyager_path_keyword]
 
                             # set the latest image and notify the guide loop thread to wake up
                             with self._guide_condition:
-                                self._latest_guide_frame = rec[self.voyager_path_keyword]
+                                self._latest_guide_frame = rec[self._voyager_path_keyword]
                                 self._guide_condition.notify()
 
                             # fetch the results from the queue
                             direction, duration = self._results_queue.get()
                             print(f"CORRECTION: {direction['x']}:{duration['x']} {direction['y']}:{duration['y']}")
 
-                            # send a pulseGuide command followed by a done
-                            # or by an error command if something happened
+                            # send a pulseGuide command followed by a loop for responses
+                            # this must be done before the next command can be sent
+                            # if both are sent ok, we send the DonutsRecenterDone, otherwise we send an error
                             try:
+                                # send x correction
                                 uuid_x = str(uuid.uuid4())
-                                self.__send_voyager_pulse_guide(uuid_x, self.image_id, direction['x'], duration['x'])
+                                self.__send_voyager_pulse_guide(uuid_x, self._comms_id, direction['x'], duration['x'])
+                                self._comms_id += 1
+
+                                # send the y correction
                                 uuid_y = str(uuid.uuid4())
-                                self.__send_voyager_pulse_guide(uuid_y, self.image_id, direction['y'], duration['y'])
-                                self.image_id += 1
+                                self.__send_voyager_pulse_guide(uuid_y, self._comms_id, direction['y'], duration['y'])
+                                self._comms_id += 1
 
                                 # send a DonutsRecenterDone message
                                 self.__send_donuts_message_to_voyager("DonutsRecenterDone")
-                            except:
+                            except Exception:
                                 # send a recentering error
                                 self.__send_donuts_message_to_voyager("DonutsRecenterError", f"Failed to PulseGuide {last_image}")
+                                traceback.print_exc()
 
                             # set the current mode back to IDLE
                             self._status = DonutsStatus.IDLE
@@ -153,17 +201,23 @@ class Voyager():
                         print('Oh dear, something unforseen has occurred. Here\'s what...')
                         print(f"ERROR PARSING: {rec}")
 
+
+                # NOTE: these jsonrpc responses need to be handled
+                # immediately after a RemoteAction request is made
+                # commenting this out here
+
                 # handle basic jsonrpc responses
-                elif 'jsonrpc' in rec.keys():
-                    print(f"RECEIVED: {rec}")
-                    if rec['result'] != 0:
-                        print(f"ERROR: {rec}")
-                    else:
-                        print(f"OK: {rec}")
+                #elif 'jsonrpc' in rec.keys():
+                #    print(f"RECEIVED: {rec}")
+                #    # if result is missing, we have an error
+                #    if 'result' not in rec.keys():
+                #        print(f"ERROR: {rec}")
+                #    else:
+                #        print(f"OK: {rec}")
 
             # do we need to poll again?
             now = time.time()
-            time_since_last_poll = now - self.last_poll_time
+            time_since_last_poll = now - self._last_poll_time
             if time_since_last_poll > 5:
                 # ping the keep alive
                 self.__keep_socket_alive()
@@ -220,7 +274,7 @@ class Voyager():
             self.socket.sendall(bytes(message, encoding='utf-8'))
             sent = True
             # update the last poll time
-            self.last_poll_time = time.time()
+            self._last_poll_time = time.time()
         except:
             print(f"Error sending message {message} to Voyager")
             traceback.print_exc()
@@ -253,7 +307,39 @@ class Voyager():
         sent = self.__send(polling_str)
         if sent:
             print(f"SENT: {polling_str.rstrip()}")
-        self.last_poll_time = time.time()
+        self._last_poll_time = time.time()
+
+    @staticmethod
+    def __parse_jsonrpc(response):
+        """
+        Take a jsonrpc response and figure out
+        what happened. If there is an error result is
+        missing and error object is there instead
+        """
+        # get the response ID
+        rec_idd = response['id']
+
+        try:
+            result = response['result']
+            error_code = None
+            error_msg = None
+        except KeyError:
+            result = -1
+            error_code = response['error']['code']
+            error_msg = response['error']['message']
+
+        return rec_idd, result, error_code, error_msg
+
+    @staticmethod
+    def __parse_remote_action_result(response):
+        """
+        Take a remote action result and see what happened
+        """
+        result = response['ActionResultInt']
+        uid = response['UID']
+        motivo = response['Motivo']
+        param_ret = response['ParamRet']
+        return uid, result, motivo, param_ret
 
     def __send_donuts_message_to_voyager(self, event, error=None):
         """
@@ -272,7 +358,8 @@ class Voyager():
         sent = self.__send(msg_str)
         if sent:
             print(f"SENT: {msg_str.rstrip()}")
-        self.last_poll_time = time.time()
+        self._last_poll_time = time.time()
+
 
     def __send_voyager_pulse_guide(self, uid, idd, direction, duration):
         """
@@ -287,11 +374,73 @@ class Voyager():
                    'id': idd}
         msg_str = json.dumps(message) + "\r\n"
 
-        # send the command
-        sent = self.__send(msg_str)
-        if sent:
-            print(f"SENT: {msg_str.rstrip()}")
-        self.last_poll_time = time.time()
+        # initialise an empty response class
+        response = Response(uid, idd)
+
+        # try sending the message and then waiting for a response
+        sent = False
+        while not sent:
+            # send the command
+            sent = self.__send(msg_str)
+            if sent:
+                print(f"SENT: {msg_str.rstrip()}")
+                print(f"CALLBACK ADD: {uid}:{idd}")
+                # NOTE: last_poll_time is updated by the send method
+
+        # loop until both responses are received
+        cb_loop_count = 0
+        while not response.uid_recv and not response.idd:
+            print(f"CALLBACK LOOP [{cb_loop_count+1}/10]: {uid}:{idd}")
+            rec = self.__receive()
+
+            # handle the jsonrpc response (1 of 2 responses needed)
+            if "jsonrpc" in rec.keys():
+                rec_idd, result, err_code, err_msg = self.__parse_jsonrpc(rec)
+
+                # we only care bout IDs for the commands we just sent right now
+                if rec_idd == idd:
+                    # result = 0 means OK, anything else is bad
+                    if result != 0:
+                        print(f"ERROR: Problem with command id: {idd}")
+                        print(f"ERROR: {err_code} {err_msg}")
+                    else:
+                        print(f"OK: Command id: {idd} returned correctly")
+
+                    # add the response, regardless if it's good or bad, so we can end this loop
+                    response.idd_received(result)
+                else:
+                    print(f"WARNING: Waiting for idd: {idd}, ignoring response for idd: {rec_idd}")
+
+            # handle the RemoteActionResult response (2 of 2 needed)
+            elif "RemoteActionResult" in rec.keys():
+                rec_uid, result, *_ = self.__parse_remote_action_result(rec)
+
+                # check we have a response for the thing we want
+                if rec_uid == uid:
+                    # result = 4 means OK, anything else is an issue
+                    if result != 4:
+                        print(f"ERROR: Problem with command uid: {uid}")
+                        print(f"ERROR: {rec}")
+                    else:
+                        print(f"OK: Command uid: {uid} returned correctly")
+
+                    # add the response, regardless if it's good or bad, so we can end this loop
+                    response.uid_received(result)
+                else:
+                    print(f"WARNING: Waiting for uid: {uid}, ignoring response for uid: {rec_uid}")
+
+            else:
+                print("WARNING: Unknown response {rec}")
+
+            cb_loop_count += 1
+            if cb_loop_count > self.CB_LOOP_LIMIT:
+                print(f"No response in {cb_loop_count} tries, breaking...")
+                break
+
+        # check was everything ok and return the result to the main thread
+        if not response.all_ok():
+            raise Exception("ERROR: Could not send pulse guide command")
+
 
     #def __image_str(self, exptime):
     #    """
