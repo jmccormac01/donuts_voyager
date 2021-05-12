@@ -91,6 +91,7 @@ class Voyager():
                         self._status = DonutsStatus.IDLE
 
                     elif rec['Event'] == "DonutsRecenterRequired":
+                        print(f"RECEIVED: {rec}")
                         # if guider is IDLE, do stuff, otherwise do nothing
                         if self._status == DonutsStatus.IDLE:
                             # set the current mode to guiding
@@ -135,6 +136,7 @@ class Voyager():
                             self.__send_donuts_message_to_voyager("DonutsRecenterDone")
 
                     elif rec['Event'] == "DonutsAbort":
+                        print(f"RECEIVED: {rec}")
                         print("Donuts abort requested, dying peacefully")
                         # close the socket
                         self.__close_socket()
@@ -143,6 +145,7 @@ class Voyager():
 
                     # handle responses to remote actions
                     elif rec['Event'] == "RemoteActionResult":
+                        print(f"RECEIVED: {rec}")
                         print("Handle remote action results for a given UID")
 
                     # erm, something has gone wrong
@@ -152,6 +155,7 @@ class Voyager():
 
                 # handle basic jsonrpc responses
                 elif 'jsonrpc' in rec.keys():
+                    print(f"RECEIVED: {rec}")
                     if rec['result'] != 0:
                         print(f"ERROR: {rec}")
                     else:
