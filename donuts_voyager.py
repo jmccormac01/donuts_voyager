@@ -377,22 +377,19 @@ class Voyager():
         # initialise an empty response class
         response = Response(uid, idd)
 
+        # try sending the message and then waiting for a response
+        sent = False
+        while not sent:
+            # send the command
+            sent = self.__send(msg_str)
+            if sent:
+                print(f"SENT: {msg_str.rstrip()}")
+                print(f"CALLBACK ADD: {uid}:{idd}")
+
         # loop until both responses are received
         cb_loop_count = 0
         while not response.uid_recv and not response.idd_recv:
-
-            # SEND
-            # try sending the message and then waiting for a response
-            sent = False
-            while not sent:
-                # send the command
-                sent = self.__send(msg_str)
-                if sent:
-                    print(f"SENT: {msg_str.rstrip()}")
-                    print(f"CALLBACK ADD: {uid}:{idd}")
-
-            # RECEIVE
-            print(f"CALLBACK LOOP [{cb_loop_count+1}/10]: {uid}:{idd}")
+            print(f"CALLBACK LOOP [{cb_loop_count+1}]: {uid}:{idd}")
             rec = self.__receive()
 
             # handle the jsonrpc response (1 of 2 responses needed)
@@ -434,10 +431,17 @@ class Voyager():
             else:
                 print(f"WARNING: Unknown response {rec}")
 
-            cb_loop_count += 1
-            if cb_loop_count > self._CB_LOOP_LIMIT:
-                print(f"No response in {cb_loop_count} tries, breaking...")
-                break
+            #cb_loop_count += 1
+            #if cb_loop_count > self._CB_LOOP_LIMIT:
+            #    print(f"No response in {cb_loop_count} tries, breaking...")
+            #    break
+
+            # keep the connection alive while waiting
+            now = time.time()
+            time_since_last_poll = now - self._last_poll_time
+            if time_since_last_poll > 5:
+                # ping the keep alive
+                self.__keep_socket_alive()
 
         # check was everything ok and raise an exception if not
         if not response.all_ok():
