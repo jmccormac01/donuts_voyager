@@ -75,7 +75,7 @@ class Voyager():
 
         # Fits image path keyword
         self._voyager_path_keyword = "FITPathAndName"
-        self._INFO_SIGNALS = ["Polling", "Version", "Signal"]
+        self._INFO_SIGNALS = ["Polling", "Version", "Signal", "NewFITReady"]
 
         # keep track of current status
         self._status = DonutsStatus.UNKNOWN
@@ -377,24 +377,27 @@ class Voyager():
         # initialise an empty response class
         response = Response(uid, idd)
 
-        # try sending the message and then waiting for a response
-        sent = False
-        while not sent:
-            # send the command
-            sent = self.__send(msg_str)
-            if sent:
-                print(f"SENT: {msg_str.rstrip()}")
-                print(f"CALLBACK ADD: {uid}:{idd}")
-                # NOTE: last_poll_time is updated by the send method
-
         # loop until both responses are received
         cb_loop_count = 0
         while not response.uid_recv and not response.idd_recv:
+
+            # SEND
+            # try sending the message and then waiting for a response
+            sent = False
+            while not sent:
+                # send the command
+                sent = self.__send(msg_str)
+                if sent:
+                    print(f"SENT: {msg_str.rstrip()}")
+                    print(f"CALLBACK ADD: {uid}:{idd}")
+
+            # RECEIVE
             print(f"CALLBACK LOOP [{cb_loop_count+1}/10]: {uid}:{idd}")
             rec = self.__receive()
 
             # handle the jsonrpc response (1 of 2 responses needed)
             if "jsonrpc" in rec.keys():
+                print(f"RECEIVED: {rec}")
                 rec_idd, result, err_code, err_msg = self.__parse_jsonrpc(rec)
 
                 # we only care bout IDs for the commands we just sent right now
@@ -405,14 +408,14 @@ class Voyager():
                         print(f"ERROR: {err_code} {err_msg}")
                     else:
                         print(f"OK: Command id: {idd} returned correctly")
-
-                    # add the response, regardless if it's good or bad, so we can end this loop
-                    response.idd_received(result)
+                        # add the response if things go well
+                        response.idd_received(result)
                 else:
                     print(f"WARNING: Waiting for idd: {idd}, ignoring response for idd: {rec_idd}")
 
             # handle the RemoteActionResult response (2 of 2 needed)
             elif "RemoteActionResult" in rec.keys():
+                print(f"RECEIVED: {rec}")
                 rec_uid, result, *_ = self.__parse_remote_action_result(rec)
 
                 # check we have a response for the thing we want
@@ -423,9 +426,8 @@ class Voyager():
                         print(f"ERROR: {rec}")
                     else:
                         print(f"OK: Command uid: {uid} returned correctly")
-
-                    # add the response, regardless if it's good or bad, so we can end this loop
-                    response.uid_received(result)
+                        # add the response, regardless if it's good or bad, so we can end this loop
+                        response.uid_received(result)
                 else:
                     print(f"WARNING: Waiting for uid: {uid}, ignoring response for uid: {rec_uid}")
 
@@ -437,7 +439,7 @@ class Voyager():
                 print(f"No response in {cb_loop_count} tries, breaking...")
                 break
 
-        # check was everything ok and return the result to the main thread
+        # check was everything ok and raise an exception if not
         if not response.all_ok():
             raise Exception("ERROR: Could not send pulse guide command")
 
