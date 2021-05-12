@@ -92,7 +92,7 @@ class Voyager():
         self._results_queue = queue.Queue(maxsize=1)
 
         # set up some callback parameters
-        self.CB_LOOP_LIMIT = 10
+        self._CB_LOOP_LIMIT = 10
 
     def run(self):
         """
@@ -389,7 +389,7 @@ class Voyager():
 
         # loop until both responses are received
         cb_loop_count = 0
-        while not response.uid_recv and not response.idd:
+        while not response.uid_recv and not response.idd_recv:
             print(f"CALLBACK LOOP [{cb_loop_count+1}/10]: {uid}:{idd}")
             rec = self.__receive()
 
@@ -430,10 +430,10 @@ class Voyager():
                     print(f"WARNING: Waiting for uid: {uid}, ignoring response for uid: {rec_uid}")
 
             else:
-                print("WARNING: Unknown response {rec}")
+                print(f"WARNING: Unknown response {rec}")
 
             cb_loop_count += 1
-            if cb_loop_count > self.CB_LOOP_LIMIT:
+            if cb_loop_count > self._CB_LOOP_LIMIT:
                 print(f"No response in {cb_loop_count} tries, breaking...")
                 break
 
