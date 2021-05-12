@@ -35,6 +35,9 @@ class Voyager():
         self.host = config['host']
         self.inst = 1
 
+        # Fits image path keyword
+        self.voyager_path_keyword = "FITPathAndName"
+
         # keep track of current status
         self._status = DonutsStatus.UNKNOWN
 
@@ -96,11 +99,11 @@ class Voyager():
                             self.__send_donuts_message_to_voyager("DonutsRecenterStart")
 
                             # keep a local copy of the image to guide on's path
-                            last_image = rec['FitPathAndName']
+                            last_image = rec[self.voyager_path_keyword]
 
                             # set the latest image and notify the guide loop thread to wake up
                             with self._guide_condition:
-                                self._latest_guide_frame = rec['FitPathAndName']
+                                self._latest_guide_frame = rec[self.voyager_path_keyword]
                                 self._guide_condition.notify()
 
                             # fetch the results from the queue
@@ -144,7 +147,8 @@ class Voyager():
 
                     # erm, something has gone wrong
                     else:
-                        print('Oh dear, something unforseen has occurred...')
+                        print('Oh dear, something unforseen has occurred. Here\'s what...')
+                        print(f"ERROR PARSING: {rec}")
 
                 # handle basic jsonrpc responses
                 elif 'jsonrpc' in rec.keys():
@@ -165,6 +169,8 @@ class Voyager():
         Analyse incoming images for guiding offsets
         """
         while 1:
+            # TODO: add something to permit ending this thread cleanly
+
             # block until a frame is available for processing
             with self._guide_condition:
                 while self._latest_guide_frame is None:
