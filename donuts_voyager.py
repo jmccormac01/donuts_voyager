@@ -37,6 +37,7 @@ class Voyager():
 
         # Fits image path keyword
         self.voyager_path_keyword = "FITPathAndName"
+        self._INFO_SIGNALS = ["Polling", "Version", "Signal"]
 
         # keep track of current status
         self._status = DonutsStatus.UNKNOWN
@@ -79,8 +80,8 @@ class Voyager():
                 # handle events
                 if 'Event' in rec.keys():
 
-                    if rec['Event'] == "Polling":
-                        pass
+                    if rec['Event'] in self._INFO_SIGNALS:
+                        print(f"RECEIVED: {rec}")
 
                     elif rec['Event'] == "DonutsCalibrationRequired":
                         # send a dummy command with a small delay for now
