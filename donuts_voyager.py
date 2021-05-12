@@ -380,41 +380,54 @@ class Voyager():
         # initialise an empty response class
         response = Response(uid, idd)
 
-        # try sending the message and then waiting for a response
-        sent = False
-        while not sent:
-            # send the command
-            sent = self.__send(msg_str)
-            if sent:
-                print(f"SENT: {msg_str.rstrip()}")
-                print(f"CALLBACK ADD: {uid}:{idd}")
-
         # loop until both responses are received
         cb_loop_count = 0
-        while not response.uid_recv and not response.idd_recv:
+        while not response.uid_recv:
+
+            # loop until we get a valid response to issuing a pulse guide command
+            while not response.idd_recv:
+                # try sending the message and then waiting for a response
+                sent = False
+                while not sent:
+                    # send the command
+                    sent = self.__send(msg_str)
+                    if sent:
+                        print(f"SENT: {msg_str.rstrip()}")
+                        print(f"CALLBACK ADD: {uid}:{idd}")
+
+
+                print(f"CALLBACK LOOP [{cb_loop_count+1}]: {uid}:{idd}")
+                rec = self.__receive()
+
+                # handle the jsonrpc response (1 of 2 responses needed)
+                if "jsonrpc" in rec.keys():
+                    print(f"RECEIVED: {rec}")
+                    rec_idd, result, err_code, err_msg = self.__parse_jsonrpc(rec)
+
+                    # we only care bout IDs for the commands we just sent right now
+                    if rec_idd == idd:
+                        # result = 0 means OK, anything else is bad
+                        if result != 0:
+                            print(f"ERROR: Problem with command id: {idd}")
+                            print(f"ERROR: {err_code} {err_msg}")
+                        else:
+                            print(f"OK: Command id: {idd} returned correctly")
+                            # add the response if things go well
+                            response.idd_received(result)
+                    else:
+                        print(f"WARNING: Waiting for idd: {idd}, ignoring response for idd: {rec_idd}")
+
+                # increment loop counter to keep track of how long we're waiting
+                cb_loop_count += 1
+
+            # if we exit the while loop above we can assume that
+            # we got a jsonrpc response to the pulse guide command
+            # here we start listening for it being done
             print(f"CALLBACK LOOP [{cb_loop_count+1}]: {uid}:{idd}")
             rec = self.__receive()
 
-            # handle the jsonrpc response (1 of 2 responses needed)
-            if "jsonrpc" in rec.keys():
-                print(f"RECEIVED: {rec}")
-                rec_idd, result, err_code, err_msg = self.__parse_jsonrpc(rec)
-
-                # we only care bout IDs for the commands we just sent right now
-                if rec_idd == idd:
-                    # result = 0 means OK, anything else is bad
-                    if result != 0:
-                        print(f"ERROR: Problem with command id: {idd}")
-                        print(f"ERROR: {err_code} {err_msg}")
-                    else:
-                        print(f"OK: Command id: {idd} returned correctly")
-                        # add the response if things go well
-                        response.idd_received(result)
-                else:
-                    print(f"WARNING: Waiting for idd: {idd}, ignoring response for idd: {rec_idd}")
-
             # handle the RemoteActionResult response (2 of 2 needed)
-            elif "RemoteActionResult" in rec.keys():
+            if "RemoteActionResult" in rec.keys():
                 print(f"RECEIVED: {rec}")
                 rec_uid, result, *_ = self.__parse_remote_action_result(rec)
 
