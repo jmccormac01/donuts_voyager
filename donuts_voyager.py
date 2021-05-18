@@ -496,7 +496,6 @@ class Voyager():
                     # send the command
                     sent = self.__send(msg_str)
                     if sent:
-                        print(f"SENT: {msg_str.rstrip()}")
                         print(f"CALLBACK ADD: {uid}:{idd}")
 
 
