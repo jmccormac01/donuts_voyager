@@ -14,6 +14,7 @@ import numpy as np
 # TODO: Add logging
 # TODO: Add RemoteActionAbort call when things go horribly wrong
 # TODO: Add Parallelized='true'to calls to RemotePrecisePointTarget and RemoteCameraShot
+# TODO: If donuts is enabled in Voyager, a DonutsAbort should be sent on aborting if Voyager is aborting
 
 # pylint: disable=line-too-long
 # pylint: disable=invalid-name
@@ -23,6 +24,97 @@ class DonutsStatus():
     Current status of Donuts guiding
     """
     CALIBRATING, GUIDING, IDLE, UNKNOWN = np.arange(4)
+
+class Message():
+    """
+    Define some dicts for specific Voyager two way commands
+
+    Also define some flags to compare responses from Voyager's
+    RemoteActionResult ActionResultInt to
+    """
+    NEED_INIT = 0
+    READY = 1
+    RUNNING = 2
+    PAUSE = 3
+    OK = 4
+    FINISHED_ERROR = 5
+    ABORTING = 6
+    ABORTED = 7
+    TIMEOUT = 8
+    TIME_END = 9
+    OK_PARTIAL = 10
+
+    @staticmethod
+    def pulse_guide(uid, idd, direction, duration):
+        """
+        Create a message object for pulse guiding
+
+        Also return the response code that says things
+        went well. Typically 4
+        """
+        message = {"method": "RemotePulseGuide",
+                   "params": {"UID": uid,
+                              "Direction": direction,
+                              "Duration": duration,
+                              "Parallelized": "true"},
+                   "id": idd}
+        return message
+
+    @staticmethod
+    def camera_shot(uid, idd, exptime, save_file, filename):
+        """
+        Create a message object for taking an image
+        with the CCD camera
+
+        Also return the response code that says things
+        went well. Typically 4
+        """
+        # TODO: add more features? (filter etc?)
+        # do we need that?
+        message = {"method": "RemoteCameraShot",
+                   "params": {"UID": uid,
+                              "Expo": exptime,
+                              "Bin": 1,
+                              "IsROI": "false",
+                              "ROITYPE": 0,
+                              "ROIX": 0,
+                              "ROIY": 0,
+                              "ROIDX": 0,
+                              "ROIDY": 0,
+                              "FilterIndex": 0,
+                              "ExpoType": 0,
+                              "SpeedIndex": 0,
+                              "ReadoutIndex": 0,
+                              "IsSaveFile": str(save_file).lower(),
+                              "FitFileName": filename,
+                              "Gain": 1,
+                              "Offset": 0,
+                              "Parallelized": "true"},
+                   "id": idd}
+        return message
+
+    @staticmethod
+    def goto_radec(uid, idd, ra, dec):
+        """
+        Create a message object for repointing the telescope
+
+        Also return the response code that says things
+        went well. Typically 4
+
+        RA and DEC should be in HH MM SS.ss ±DD MM SS.ss format
+        In this format we set IsText = true and set 0's for RA and DEC.
+        We give the coords in the RAText and DECText arguments
+        """
+        message = {"method": "RemotePrecisePointTarget",
+                   "params": {"UID": uid,
+                              "IsText": "true",
+                              "RA": 0,
+                              "DEC": 0,
+                              "RAText": ra,
+                              "DECText": dec,
+                              "Parallelized": "true"},
+                   "id": idd}
+        return message
 
 class Response():
     """
@@ -114,18 +206,25 @@ class Voyager():
         # set guiding statuse to IDLE
         self._status = DonutsStatus.IDLE
 
+        # create message object
+        msg = Message()
+
         # loop until told to stop
         while 1:
             # listen for a response or a new job to do
             rec = self.__receive()
+
+            # was there a command? If so, do something, else, do nothing/keep alive
             if rec:
 
                 # handle events
                 if 'Event' in rec.keys():
 
+                    # do nothing for events that just give us some info
                     if rec['Event'] in self._INFO_SIGNALS:
                         print(f"RECEIVED: {rec}")
 
+                    # handle the autoguider calibration event
                     elif rec['Event'] == "DonutsCalibrationRequired":
                         # send a dummy command with a small delay for now
                         self._status = DonutsStatus.CALIBRATING
@@ -134,6 +233,7 @@ class Voyager():
                         self.__send_donuts_message_to_voyager("DonutsCalibrationDone")
                         self._status = DonutsStatus.IDLE
 
+                    # handle the autoguiding event
                     elif rec['Event'] == "DonutsRecenterRequired":
                         print(f"RECEIVED: {rec}")
                         # if guider is IDLE, do stuff, otherwise do nothing
@@ -159,14 +259,18 @@ class Voyager():
                             # this must be done before the next command can be sent
                             # if both are sent ok, we send the DonutsRecenterDone, otherwise we send an error
                             try:
-                                # send x correction
+                                # make x correction message
                                 uuid_x = str(uuid.uuid4())
-                                self.__send_voyager_pulse_guide(uuid_x, self._comms_id, direction['x'], duration['x'])
+                                message_x = msg.pulse_guide(uuid_x, self._comms_id, direction['x'], duration['x'])
+                                # send x correction
+                                self.__send_two_way_message_to_voyager(message_x, msg.OK)
                                 self._comms_id += 1
 
-                                # send the y correction
+                                # make y correction message
                                 uuid_y = str(uuid.uuid4())
-                                self.__send_voyager_pulse_guide(uuid_y, self._comms_id, direction['y'], duration['y'])
+                                message_y = msg.pulse_guide(uuid_y, self._comms_id, direction['y'], duration['y'])
+                                # send the y correction
+                                self.__send_two_way_message_to_voyager(message_y, msg.OK)
                                 self._comms_id += 1
 
                                 # send a DonutsRecenterDone message
@@ -179,12 +283,14 @@ class Voyager():
                             # set the current mode back to IDLE
                             self._status = DonutsStatus.IDLE
 
+                        # ignore commands if we're already doing something
                         else:
                             print("WARNING: Donuts is busy, skipping...")
                             # send Voyager a start and a done command to keep it happy
                             self.__send_donuts_message_to_voyager("DonutsRecenterStart")
                             self.__send_donuts_message_to_voyager("DonutsRecenterDone")
 
+                    # handle the abort event
                     elif rec['Event'] == "DonutsAbort":
                         print(f"RECEIVED: {rec}")
                         print("Donuts abort requested, dying peacefully")
@@ -193,29 +299,10 @@ class Voyager():
                         # exit
                         sys.exit(0)
 
-                    # handle responses to remote actions
-                    elif rec['Event'] == "RemoteActionResult":
-                        print(f"RECEIVED: {rec}")
-                        print("Handle remote action results for a given UID")
-
                     # erm, something has gone wrong
                     else:
                         print('Oh dear, something unforseen has occurred. Here\'s what...')
                         print(f"ERROR PARSING: {rec}")
-
-
-                # NOTE: these jsonrpc responses need to be handled
-                # immediately after a RemoteAction request is made
-                # commenting this out here
-
-                # handle basic jsonrpc responses
-                #elif 'jsonrpc' in rec.keys():
-                #    print(f"RECEIVED: {rec}")
-                #    # if result is missing, we have an error
-                #    if 'result' not in rec.keys():
-                #        print(f"ERROR: {rec}")
-                #    else:
-                #        print(f"OK: {rec}")
 
             # do we need to poll again?
             now = time.time()
@@ -267,20 +354,25 @@ class Voyager():
         """
         self.socket.close()
 
-    def __send(self, message):
+    def __send(self, message, n_attempts=3):
         """
         Send a message to Voyager
         """
-        try:
-            # send the command
-            self.socket.sendall(bytes(message, encoding='utf-8'))
-            sent = True
-            # update the last poll time
-            self._last_poll_time = time.time()
-        except:
-            print(f"Error sending message {message} to Voyager")
-            traceback.print_exc()
-            sent = False
+        sent = False
+        while not sent and n_attempts > 0:
+            n_attempts -= 1
+            try:
+                # send the command
+                self.socket.sendall(bytes(message, encoding='utf-8'))
+                sent = True
+                # update the last poll time
+                self._last_poll_time = time.time()
+                print(f"SENT: {message.rstrip()}")
+            except:
+                print(f"ERROR: CANNOT SEND {message} TO VOYAGER [{n_attempts}]")
+                traceback.print_exc()
+                sent = False
+
         return sent
 
     def __receive(self, n_bytes=1024):
@@ -306,10 +398,8 @@ class Voyager():
 
         # send the polling string
         polling_str = json.dumps(polling) + "\r\n"
-        sent = self.__send(polling_str)
-        if sent:
-            print(f"SENT: {polling_str.rstrip()}")
-        self._last_poll_time = time.time()
+        _ = self.__send(polling_str)
+        # TODO: do something if not sent?
 
     @staticmethod
     def __parse_jsonrpc(response):
@@ -357,10 +447,8 @@ class Voyager():
 
         # send the command
         msg_str = json.dumps(message) + "\r\n"
-        sent = self.__send(msg_str)
-        if sent:
-            print(f"SENT: {msg_str.rstrip()}")
-        self._last_poll_time = time.time()
+        _ = self.__send(msg_str)
+        # TODO: do something if not sent?
 
     def __send_abort_message_to_voyager(self, uid, idd):
         """
@@ -373,27 +461,24 @@ class Voyager():
         msg_str = json.dumps(message) + "\r\n"
 
         # send the command
-        sent = self.__send(msg_str)
-        if sent:
-            print(f"SENT: {msg_str.rstrip()}")
-        self._last_poll_time = time.time()
+        _ = self.__send(msg_str)
+        # TODO: do something if not sent?
 
         # TODO: we should probably wait to check the jsonrpc for abort here also
-        # skip this for now. I think we need a generic send/receive method. Will 
+        # skip this for now. I think we need a generic send/receive method. Will
         # bake it into that later
 
-    def __send_voyager_pulse_guide(self, uid, idd, direction, duration):
+    def __send_two_way_message_to_voyager(self, message, ok_status):
         """
-        Issue the final post-PID loop guide corrections in direction/duration
-        format. These values are mapped from X and Y offsets during calibration
+        Issue any two way command to Voyager
+
+        Wait for the initial jsonrpc response, act accordingly
+        If all good, wait for the RemoteActionResult event, act accordingly
         """
-        # generate a unique ID for this transmission
-        message = {'method': 'RemotePulseGuide',
-                   'params': {'UID': uid,
-                              'Direction': direction,
-                              'Duration': duration,
-                              'Parallelized': 'true'},
-                   'id': idd}
+        # grab this message's UID and ID values
+        uid = message['params']['UID']
+        idd = message['id']
+
         msg_str = json.dumps(message) + "\r\n"
 
         # initialise an empty response class
@@ -426,10 +511,11 @@ class Voyager():
                     # we only care bout IDs for the commands we just sent right now
                     if rec_idd == idd:
                         # result = 0 means OK, anything else is bad
+                        # leave this jsonrpc check hardcoded
                         if result != 0:
                             print(f"ERROR: Problem with command id: {idd}")
                             print(f"ERROR: {err_code} {err_msg}")
-                            # Leo said if result!=0, we have a serious issue. Therefore abort. 
+                            # Leo said if result!=0, we have a serious issue. Therefore abort.
                             self.__send_abort_message_to_voyager(uid, idd)
                             raise Exception("ERROR: Could not send pulse guide command")
                         else:
@@ -458,7 +544,7 @@ class Voyager():
                     # check we have a response for the thing we want
                     if rec_uid == uid:
                         # result = 4 means OK, anything else is an issue
-                        if result != 4:
+                        if result != ok_status:
                             print(f"ERROR: Problem with command uid: {uid}")
                             print(f"ERROR: {rec}")
                             # TODO: Consider adding a RemoteActionAbort here if shit hits the fan
@@ -481,36 +567,9 @@ class Voyager():
                 # ping the keep alive
                 self.__keep_socket_alive()
 
-
         # check was everything ok and raise an exception if not
         if not response.all_ok():
             raise Exception("ERROR: Could not send pulse guide command")
-
-
-    #def __image_str(self, exptime):
-    #    """
-    #    Create a string for taking an image
-    #    """
-    #    image_dict = {"method": "RemoteCameraShot",
-    #                  "params": {"UID": "eaea5429-f5a9-4012-bc9b-f109e605f5d8",
-    #                             "Expo": f"{exptime}",
-    #                             "Bin": 1,
-    #                             "IsROI": "false",
-    #                             "ROITYPE": 0,
-    #                             "ROIX": 0,
-    #                             "ROIY": 0,
-    #                             "ROIDX": 0,
-    #                             "ROIDY": 0,
-    #                             "FilterIndex": 0,
-    #                             "ExpoType": 0,
-    #                             "SpeedIndex": 0,
-    #                             "ReadoutIndex": 0,
-    #                             "IsSaveFile": "false",
-    #                             "FitFileName": "",
-    #                             "Gain": 1,
-    #                             "Offset": 0},
-    #                  "id": self.image_id}
-    #    return json.dumps(image_dict)
 
 if __name__ == "__main__":
 
