@@ -13,8 +13,8 @@ import numpy as np
 
 # TODO: Add logging
 # TODO: Add RemoteActionAbort call when things go horribly wrong
-# TODO: Add Parallelized='true'to calls to RemotePrecisePointTarget and RemoteCameraShot
-# TODO: If donuts is enabled in Voyager, a DonutsAbort should be sent on aborting if Voyager is aborting
+# TODO: Determine how to trigger/abort donuts script from drag_script
+# this has been ignored for now while testing
 
 # pylint: disable=line-too-long
 # pylint: disable=invalid-name
@@ -30,7 +30,7 @@ class Message():
     Define some dicts for specific Voyager two way commands
 
     Also define some flags to compare responses from Voyager's
-    RemoteActionResult ActionResultInt to
+    RemoteActionResult ActionResultInt to.
     """
     NEED_INIT = 0
     READY = 1
@@ -120,7 +120,7 @@ class Response():
     """
     Keep track of outstanding responses from Voyager
     """
-    def __init__(self, uid, idd):
+    def __init__(self, uid, idd, ok_status):
         """
         Initialise response object
         """
@@ -149,9 +149,12 @@ class Response():
         """
         Check if uid and idd are all ok
         Return True if so and False if not
+
+        idd is left hardcoded to 0
+        uid code is supplied
         """
         return self.uid_recv and self.idd_recv and \
-               self.uid_status == 4 and self.idd_status == 0
+               self.uid_status == ok_status and self.idd_status == 0
 
 class Voyager():
     """
@@ -482,14 +485,15 @@ class Voyager():
         msg_str = json.dumps(message) + "\r\n"
 
         # initialise an empty response class
-        response = Response(uid, idd)
+        response = Response(uid, idd, ok_status)
 
         # loop until both responses are received
         cb_loop_count = 0
         while not response.uid_recv:
 
-            # loop until we get a valid response to issuing a pulse guide command
+            # loop until we get a valid response to issuing a command
             while not response.idd_recv:
+
                 # try sending the message and then waiting for a response
                 sent = False
                 while not sent:
