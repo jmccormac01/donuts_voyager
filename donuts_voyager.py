@@ -449,23 +449,27 @@ class Voyager():
             rec = self.__receive()
 
             # handle the RemoteActionResult response (2 of 2 needed)
-            if "RemoteActionResult" in rec.keys():
-                print(f"RECEIVED: {rec}")
-                rec_uid, result, *_ = self.__parse_remote_action_result(rec)
+            if "Event" in rec.keys():
 
-                # check we have a response for the thing we want
-                if rec_uid == uid:
-                    # result = 4 means OK, anything else is an issue
-                    if result != 4:
-                        print(f"ERROR: Problem with command uid: {uid}")
-                        print(f"ERROR: {rec}")
-                        # TODO: Consider adding a RemoteActionAbort here if shit hits the fan
+                if rec['Event'] == "RemoteActionResult":
+                    print(f"RECEIVED: {rec}")
+                    rec_uid, result, *_ = self.__parse_remote_action_result(rec)
+
+                    # check we have a response for the thing we want
+                    if rec_uid == uid:
+                        # result = 4 means OK, anything else is an issue
+                        if result != 4:
+                            print(f"ERROR: Problem with command uid: {uid}")
+                            print(f"ERROR: {rec}")
+                            # TODO: Consider adding a RemoteActionAbort here if shit hits the fan
+                        else:
+                            print(f"OK: Command uid: {uid} returned correctly")
+                            # add the response, regardless if it's good or bad, so we can end this loop
+                            response.uid_received(result)
                     else:
-                        print(f"OK: Command uid: {uid} returned correctly")
-                        # add the response, regardless if it's good or bad, so we can end this loop
-                        response.uid_received(result)
+                        print(f"WARNING: Waiting for uid: {uid}, ignoring response for uid: {rec_uid}")
                 else:
-                    print(f"WARNING: Waiting for uid: {uid}, ignoring response for uid: {rec_uid}")
+                    print(f"WARNING: Unknown response {rec}")
 
             else:
                 print(f"WARNING: Unknown response {rec}")
