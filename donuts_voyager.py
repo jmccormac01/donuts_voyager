@@ -11,7 +11,9 @@ import json
 import uuid
 import numpy as np
 
-# TODO: add logging
+# TODO: Add logging
+# TODO: Add RemoteActionAbort call when things go horribly wrong
+# TODO: Add Parallelized='true'to calls to RemotePrecisePointTarget and RemoteCameraShot
 
 # pylint: disable=line-too-long
 # pylint: disable=invalid-name
@@ -152,9 +154,6 @@ class Voyager():
                             # fetch the results from the queue
                             direction, duration = self._results_queue.get()
                             print(f"CORRECTION: {direction['x']}:{duration['x']} {direction['y']}:{duration['y']}")
-
-                            # The hope is pule guide can be applied after the DonutsRecenterDone command
-                            # it doesn't seem possible to send it while it's waiting
 
                             # send a pulseGuide command followed by a loop for responses
                             # this must be done before the next command can be sent
@@ -363,6 +362,25 @@ class Voyager():
             print(f"SENT: {msg_str.rstrip()}")
         self._last_poll_time = time.time()
 
+    def __send_abort_message_to_voyager(self, uid, idd):
+        """
+        If things go pear shaped and donuts is quitting,
+        tell Voyager to abort this UID:IDD also
+        """
+        message = {'method': 'RemoteActionAbort',
+                   'params': {'UID': uid},
+                   'id': idd}
+        msg_str = json.dumps(message) + "\r\n"
+
+        # send the command
+        sent = self.__send(msg_str)
+        if sent:
+            print(f"SENT: {msg_str.rstrip()}")
+        self._last_poll_time = time.time()
+
+        # TODO: we should probably wait to check the jsonrpc for abort here also
+        # skip this for now. I think we need a generic send/receive method. Will 
+        # bake it into that later
 
     def __send_voyager_pulse_guide(self, uid, idd, direction, duration):
         """
@@ -373,7 +391,8 @@ class Voyager():
         message = {'method': 'RemotePulseGuide',
                    'params': {'UID': uid,
                               'Direction': direction,
-                              'Duration': duration},
+                              'Duration': duration,
+                              'Parallelized': 'true'},
                    'id': idd}
         msg_str = json.dumps(message) + "\r\n"
 
@@ -410,9 +429,12 @@ class Voyager():
                         if result != 0:
                             print(f"ERROR: Problem with command id: {idd}")
                             print(f"ERROR: {err_code} {err_msg}")
+                            # Leo said if result!=0, we have a serious issue. Therefore abort. 
+                            self.__send_abort_message_to_voyager(uid, idd)
+                            raise Exception("ERROR: Could not send pulse guide command")
                         else:
                             print(f"OK: Command id: {idd} returned correctly")
-                            # add the response if things go well
+                            # add the response if things go well. if things go badly we're quitting anyway
                             response.idd_received(result)
                     else:
                         print(f"WARNING: Waiting for idd: {idd}, ignoring response for idd: {rec_idd}")
@@ -437,6 +459,7 @@ class Voyager():
                     if result != 4:
                         print(f"ERROR: Problem with command uid: {uid}")
                         print(f"ERROR: {rec}")
+                        # TODO: Consider adding a RemoteActionAbort here if shit hits the fan
                     else:
                         print(f"OK: Command uid: {uid} returned correctly")
                         # add the response, regardless if it's good or bad, so we can end this loop
@@ -446,11 +469,6 @@ class Voyager():
 
             else:
                 print(f"WARNING: Unknown response {rec}")
-
-            #cb_loop_count += 1
-            #if cb_loop_count > self._CB_LOOP_LIMIT:
-            #    print(f"No response in {cb_loop_count} tries, breaking...")
-            #    break
 
             # keep the connection alive while waiting
             now = time.time()
