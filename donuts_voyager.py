@@ -630,6 +630,9 @@ class Voyager():
                 else:
                     print(f"WARNING [1]: Unknown response {rec}")
 
+            # no response? do nothing
+            elif not rec.keys():
+                pass
             else:
                 print(f"WARNING [2]: Unknown response {rec}")
 
