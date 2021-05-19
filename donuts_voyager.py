@@ -362,7 +362,7 @@ class Voyager():
                     # handle the abort event
                     elif rec['Event'] == "DonutsAbort":
                         print(f"RECEIVED: {rec}")
-                        print("Donuts abort requested, dying peacefully")
+                        print("EVENT: Donuts abort requested, dying peacefully")
                         # close the socket
                         self.__close_socket()
                         # exit
@@ -370,8 +370,8 @@ class Voyager():
 
                     # erm, something has gone wrong
                     else:
-                        print('Oh dear, something unforseen has occurred. Here\'s what...')
-                        print(f"ERROR PARSING: {rec}")
+                        print('ERROR: Oh dear, something unforseen has occurred. Here\'s what...')
+                        print(f"ERROR: Failed parsing {rec}")
 
             # do we need to poll again?
             now = time.time()
@@ -398,7 +398,7 @@ class Voyager():
                 # Update PID loop
 
                 # test case
-                print(frame_path)
+                print(f"INFO: filename = {frame_path}")
                 direction = {"x": 0, "y": 2}
                 duration = {"x": 1000, "y": 500}
                 self._results_queue.put((direction, duration))
@@ -412,8 +412,8 @@ class Voyager():
         try:
             self.socket.connect((self.socket_ip, self.socket_port))
         except s.error:
-            print('Voyager socket connect failed!')
-            print('Check the application interface is running!')
+            print('ERROR: Voyager socket connect failed!')
+            print('ERROR: Check the application interface is running!')
             traceback.print_exc()
             sys.exit(1)
 
@@ -452,7 +452,6 @@ class Voyager():
             message = json.loads(self.socket.recv(n_bytes))
         except s.timeout:
             message = {}
-            #print("Socket receive timeout, continuing...")
         return message
 
     def __keep_socket_alive(self):
@@ -569,7 +568,7 @@ class Voyager():
                         print(f"CALLBACK ADD: {uid}:{idd}")
 
 
-                print(f"[JSONRPC] CALLBACK LOOP [{cb_loop_count+1}]: {uid}:{idd}")
+                print(f"INFO: JSONRPC CALLBACK LOOP [{cb_loop_count+1}]: {uid}:{idd}")
                 rec = self.__receive()
 
                 # handle the jsonrpc response (1 of 2 responses needed)
@@ -588,7 +587,7 @@ class Voyager():
                             self.__send_abort_message_to_voyager(uid, idd)
                             raise Exception("ERROR: Could not send pulse guide command")
                         else:
-                            print(f"OK: Command id: {idd} returned correctly")
+                            print(f"INFO: Command id: {idd} returned correctly")
                             # add the response if things go well. if things go badly we're quitting anyway
                             response.idd_received(result)
                     else:
@@ -600,7 +599,7 @@ class Voyager():
             # if we exit the while loop above we can assume that
             # we got a jsonrpc response to the pulse guide command
             # here we start listening for it being done
-            print(f"[EVENT] CALLBACK LOOP [{cb_loop_count+1}]: {uid}:{idd}")
+            print(f"INFO: EVENT CALLBACK LOOP [{cb_loop_count+1}]: {uid}:{idd}")
             rec = self.__receive()
 
             # handle the RemoteActionResult response (2 of 2 needed)
@@ -618,7 +617,7 @@ class Voyager():
                             print(f"ERROR: {rec}")
                             # TODO: Consider adding a RemoteActionAbort here if shit hits the fan
                         else:
-                            print(f"OK: Command uid: {uid} returned correctly")
+                            print(f"INFO: Command uid: {uid} returned correctly")
                             # add the response, regardless if it's good or bad, so we can end this loop
                             response.uid_received(result)
                     else:
