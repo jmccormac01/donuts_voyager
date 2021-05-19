@@ -246,30 +246,16 @@ class Voyager():
                         data_loc, _ = vutils.get_data_dir(self.calibration_dir)
 
                         # point the telescope to 1h west of the meridian
-                        
-
-                        # create the filename
-
-                        # take an image
 
                         # make it the reference for Donuts
 
-
-                        # pulse guide the telescope in 1 direction for N ms
-
-                        # take an image
-
                         # calculate the shift and store result
-
-                        # loop for all directions
-
-                        # loop the loop M times
 
                         # determine direction and ms/pix scaling
 
 
                         # but first, let's test taking an image
-                        filename = f"{data_loc}\\test_0.fit"
+                        filename = f"{data_loc}\\test_{self._image_id}.fit"
                         save_file = "true"
                         shot_uuid = str(uuid.uuid4())
                         exptime = 20
@@ -278,8 +264,40 @@ class Voyager():
                             message_shot = msg.camera_shot(shot_uuid, self._comms_id, exptime, save_file, filename)
                             self.__send_two_way_message_to_voyager(message_shot, msg.OK)
                             self._comms_id += 1
+                            self._image_id += 1
                         except Exception:
                             self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename}")
+
+                        # TODO: Make this the reference image or do calibration externally
+
+                        # loop over the 4 directions
+                        for j in range(10):
+                            for i in range(4):
+
+                                # pulse guide in direction i
+                                try:
+                                    uuid_i = str(uuid.uuid4())
+                                    message_pg = msg.pulse_guide(uuid_i, self._comms_id, i, 5000)
+                                    # send x correction
+                                    self.__send_two_way_message_to_voyager(message_pg, msg.OK)
+                                    self._comms_id += 1
+                                    self._image_id += 1
+                                except Exception:
+                                    # send a recentering error
+                                    self.__send_donuts_message_to_voyager("DonutsRecenterError", f"Failed to PulseGuide {i} 5000")
+                                    traceback.print_exc()
+
+                                # take an image
+                                try:
+                                    filename = f"{data_loc}\\test_{self._image_id}.fit"
+                                    shot_uuid = str(uuid.uuid4())
+                                    message_shot = msg.camera_shot(shot_uuid, self._comms_id, exptime, save_file, filename)
+                                    self.__send_two_way_message_to_voyager(message_shot, msg.OK)
+                                    self._comms_id += 1
+                                    self._image_id += 1
+                                except Exception:
+                                    self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename}")
+
 
                         self.__send_donuts_message_to_voyager("DonutsCalibrationDone")
                         self._status = DonutsStatus.IDLE
@@ -605,6 +623,10 @@ class Voyager():
                             response.uid_received(result)
                     else:
                         print(f"WARNING: Waiting for uid: {uid}, ignoring response for uid: {rec_uid}")
+
+                if rec['Event'] in self._INFO_SIGNALS:
+                    print(f"RECEIVED: {rec}")
+
                 else:
                     print(f"WARNING: Unknown response {rec}")
 
