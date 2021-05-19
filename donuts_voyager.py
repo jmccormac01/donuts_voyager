@@ -198,6 +198,7 @@ class Voyager():
         self.calibration_dir = config['calibration_dir']
         if not os.path.exists(self.calibration_dir):
             os.mkdir(self.calibration_dir)
+        self.calibration_step_size_ms = config['calibration_step_size_ms']
 
     def run(self):
         """
@@ -255,7 +256,7 @@ class Voyager():
 
 
                         # but first, let's test taking an image
-                        filename = f"{data_loc}\\test_{self._image_id}.fit"
+                        filename = f"{data_loc}\\test_0_0_0.fit"
                         save_file = "true"
                         shot_uuid = str(uuid.uuid4())
                         exptime = 20
@@ -270,26 +271,25 @@ class Voyager():
 
                         # TODO: Make this the reference image or do calibration externally
 
-                        # loop over the 4 directions
-                        for j in range(10):
+                        # loop over the 4 directions for the requested number of iterations
+                        for j in range(self.calibration_n_iterations):
                             for i in range(4):
-
                                 # pulse guide in direction i
                                 try:
                                     uuid_i = str(uuid.uuid4())
-                                    message_pg = msg.pulse_guide(uuid_i, self._comms_id, i, 5000)
-                                    # send x correction
+                                    message_pg = msg.pulse_guide(uuid_i, self._comms_id, i, self.calibration_step_size_ms)
+                                    # send pulse guide command in direction i
                                     self.__send_two_way_message_to_voyager(message_pg, msg.OK)
                                     self._comms_id += 1
                                     self._image_id += 1
                                 except Exception:
                                     # send a recentering error
-                                    self.__send_donuts_message_to_voyager("DonutsRecenterError", f"Failed to PulseGuide {i} 5000")
+                                    self.__send_donuts_message_to_voyager("DonutsRecenterError", f"Failed to PulseGuide {i} {self.calibration_step_size_ms}")
                                     traceback.print_exc()
 
                                 # take an image
                                 try:
-                                    filename = f"{data_loc}\\test_{self._image_id}.fit"
+                                    filename = f"{data_loc}\\test_{j}_{i}_{self.calibration_step_size_ms}.fit"
                                     shot_uuid = str(uuid.uuid4())
                                     message_shot = msg.camera_shot(shot_uuid, self._comms_id, exptime, save_file, filename)
                                     self.__send_two_way_message_to_voyager(message_shot, msg.OK)
@@ -569,7 +569,7 @@ class Voyager():
                         print(f"CALLBACK ADD: {uid}:{idd}")
 
 
-                print(f"CALLBACK LOOP [{cb_loop_count+1}]: {uid}:{idd}")
+                print(f"[JSONRPC] CALLBACK LOOP [{cb_loop_count+1}]: {uid}:{idd}")
                 rec = self.__receive()
 
                 # handle the jsonrpc response (1 of 2 responses needed)
@@ -600,7 +600,7 @@ class Voyager():
             # if we exit the while loop above we can assume that
             # we got a jsonrpc response to the pulse guide command
             # here we start listening for it being done
-            print(f"CALLBACK LOOP [{cb_loop_count+1}]: {uid}:{idd}")
+            print(f"[EVENT] CALLBACK LOOP [{cb_loop_count+1}]: {uid}:{idd}")
             rec = self.__receive()
 
             # handle the RemoteActionResult response (2 of 2 needed)
@@ -649,7 +649,9 @@ if __name__ == "__main__":
     config = {'socket_ip': '127.0.0.1',
               'socket_port': 5950,
               'host': 'DESKTOP-CNTF3JR',
-              'calibration_dir': 'C:\\Users\\user\\Documents\\Voyager\\DonutsCalibration'}
+              'calibration_dir': 'C:\\Users\\user\\Documents\\Voyager\\DonutsCalibration',
+              'calibration_step_size_ms': 5000,
+              'calibration_n_iterations': 3}
 
     voyager = Voyager(config)
     voyager.run()
