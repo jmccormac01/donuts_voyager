@@ -172,6 +172,7 @@ class Voyager():
         self.socket_port = config['socket_port']
         self.host = config['host']
         self.inst = 1
+        self.image_extension = config['image_extension']
 
         # Fits image path keyword
         self._voyager_path_keyword = "FITPathAndName"
@@ -179,6 +180,9 @@ class Voyager():
 
         # keep track of current status
         self._status = DonutsStatus.UNKNOWN
+
+        # add a message object for sharing between methods
+        self._msg = Message()
 
         self._image_id = 0
         self._comms_id = 0
@@ -195,11 +199,80 @@ class Voyager():
         self._CB_LOOP_LIMIT = 10
 
         # set up some calibration dir info
-        self.calibration_dir = config['calibration_dir']
-        if not os.path.exists(self.calibration_dir):
-            os.mkdir(self.calibration_dir)
+        self.calibration_root = config['calibration_root']
+        if not os.path.exists(self.calibration_root):
+            os.mkdir(self.calibration_root)
+        # this calibration directory inside calibration root gets made if we calibrate
+        self.calibration_dir = None
         self.calibration_step_size_ms = config['calibration_step_size_ms']
         self.calibration_n_iterations = config['calibration_n_iterations']
+        self.calibration_exptime = config['calibration_exptime']
+
+    def __calibration_filename(self, direction, pulse_time):
+        """
+        Return a calibration filename
+        """
+        return f"{self.calibration_dir}\\step_{self._image_id}_d{direction}_{pulse_time}ms{self.image_extension}"
+
+    def __calibrate_donuts(self):
+        """
+        Run the calibration routine
+
+        Take in the message object so we can prepare commands
+        """
+        # set up calibration directory
+        self.calibration_dir, _ = vutils.get_data_dir(self.calibration_root)
+
+        # point the telescope to 1h west of the meridian
+
+        # make it the reference for Donuts
+
+        # calculate the shift and store result
+
+        # determine direction and ms/pix scaling
+
+
+
+        # get the reference filename
+        filename = self.__calibration_filename("R", 0)
+        shot_uuid = str(uuid.uuid4())
+        # take an image at the current location
+        try:
+            message_shot = self._msg.camera_shot(shot_uuid, self._comms_id, self.calibration_exptime, "true", filename)
+            self.__send_two_way_message_to_voyager(message_shot)
+            self._comms_id += 1
+            self._image_id += 1
+        except Exception:
+            self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename}")
+
+        # TODO: Make this the reference image or do calibration externally
+
+        # loop over the 4 directions for the requested number of iterations
+        for _ in range(self.calibration_n_iterations):
+            for i in range(4):
+                # pulse guide in direction i
+                try:
+                    uuid_i = str(uuid.uuid4())
+                    message_pg = self._msg.pulse_guide(uuid_i, self._comms_id, i, self.calibration_step_size_ms)
+                    # send pulse guide command in direction i
+                    self.__send_two_way_message_to_voyager(message_pg)
+                    self._comms_id += 1
+                    self._image_id += 1
+                except Exception:
+                    # send a recentering error
+                    self.__send_donuts_message_to_voyager("DonutsRecenterError", f"Failed to PulseGuide {i} {self.calibration_step_size_ms}")
+                    traceback.print_exc()
+
+                # take an image
+                try:
+                    filename = self.__calibration_filename(i, self.calibration_step_size_ms)
+                    shot_uuid = str(uuid.uuid4())
+                    message_shot = self._msg.camera_shot(shot_uuid, self._comms_id, self.calibration_exptime, "true", filename)
+                    self.__send_two_way_message_to_voyager(message_shot)
+                    self._comms_id += 1
+                    self._image_id += 1
+                except Exception:
+                    self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename}")
 
     def run(self):
         """
@@ -218,9 +291,6 @@ class Voyager():
 
         # set guiding statuse to IDLE
         self._status = DonutsStatus.IDLE
-
-        # create message object
-        msg = Message()
 
         # loop until told to stop
         while 1:
@@ -243,62 +313,10 @@ class Voyager():
                         self._status = DonutsStatus.CALIBRATING
                         self.__send_donuts_message_to_voyager("DonutsCalibrationStart")
 
-                        # set up calibration directory
-                        data_loc, _ = vutils.get_data_dir(self.calibration_dir)
+                        # run the calibration process
+                        self.__calibrate_donuts()
 
-                        # point the telescope to 1h west of the meridian
-
-                        # make it the reference for Donuts
-
-                        # calculate the shift and store result
-
-                        # determine direction and ms/pix scaling
-
-
-                        # but first, let's test taking an image
-                        filename = f"{data_loc}\\test_0_0_0.fit"
-                        save_file = "true"
-                        shot_uuid = str(uuid.uuid4())
-                        exptime = 20
-
-                        try:
-                            message_shot = msg.camera_shot(shot_uuid, self._comms_id, exptime, save_file, filename)
-                            self.__send_two_way_message_to_voyager(message_shot, msg.OK)
-                            self._comms_id += 1
-                            self._image_id += 1
-                        except Exception:
-                            self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename}")
-
-                        # TODO: Make this the reference image or do calibration externally
-
-                        # loop over the 4 directions for the requested number of iterations
-                        for j in range(self.calibration_n_iterations):
-                            for i in range(4):
-                                # pulse guide in direction i
-                                try:
-                                    uuid_i = str(uuid.uuid4())
-                                    message_pg = msg.pulse_guide(uuid_i, self._comms_id, i, self.calibration_step_size_ms)
-                                    # send pulse guide command in direction i
-                                    self.__send_two_way_message_to_voyager(message_pg, msg.OK)
-                                    self._comms_id += 1
-                                    self._image_id += 1
-                                except Exception:
-                                    # send a recentering error
-                                    self.__send_donuts_message_to_voyager("DonutsRecenterError", f"Failed to PulseGuide {i} {self.calibration_step_size_ms}")
-                                    traceback.print_exc()
-
-                                # take an image
-                                try:
-                                    filename = f"{data_loc}\\test_{j}_{i}_{self.calibration_step_size_ms}.fit"
-                                    shot_uuid = str(uuid.uuid4())
-                                    message_shot = msg.camera_shot(shot_uuid, self._comms_id, exptime, save_file, filename)
-                                    self.__send_two_way_message_to_voyager(message_shot, msg.OK)
-                                    self._comms_id += 1
-                                    self._image_id += 1
-                                except Exception:
-                                    self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename}")
-
-
+                        # send the calibration done message
                         self.__send_donuts_message_to_voyager("DonutsCalibrationDone")
                         self._status = DonutsStatus.IDLE
 
@@ -330,16 +348,16 @@ class Voyager():
                             try:
                                 # make x correction message
                                 uuid_x = str(uuid.uuid4())
-                                message_x = msg.pulse_guide(uuid_x, self._comms_id, direction['x'], duration['x'])
+                                message_x = self._msg.pulse_guide(uuid_x, self._comms_id, direction['x'], duration['x'])
                                 # send x correction
-                                self.__send_two_way_message_to_voyager(message_x, msg.OK)
+                                self.__send_two_way_message_to_voyager(message_x)
                                 self._comms_id += 1
 
                                 # make y correction message
                                 uuid_y = str(uuid.uuid4())
-                                message_y = msg.pulse_guide(uuid_y, self._comms_id, direction['y'], duration['y'])
+                                message_y = self._msg.pulse_guide(uuid_y, self._comms_id, direction['y'], duration['y'])
                                 # send the y correction
-                                self.__send_two_way_message_to_voyager(message_y, msg.OK)
+                                self.__send_two_way_message_to_voyager(message_y)
                                 self._comms_id += 1
 
                                 # send a DonutsRecenterDone message
@@ -536,7 +554,7 @@ class Voyager():
         # skip this for now. I think we need a generic send/receive method. Will
         # bake it into that later
 
-    def __send_two_way_message_to_voyager(self, message, ok_status):
+    def __send_two_way_message_to_voyager(self, message):
         """
         Issue any two way command to Voyager
 
@@ -550,7 +568,8 @@ class Voyager():
         msg_str = json.dumps(message) + "\r\n"
 
         # initialise an empty response class
-        response = Response(uid, idd, ok_status)
+        # add the OK status we want to see returned
+        response = Response(uid, idd, self._msg.OK)
 
         # loop until both responses are received
         cb_loop_count = 0
@@ -612,7 +631,7 @@ class Voyager():
                     # check we have a response for the thing we want
                     if rec_uid == uid:
                         # result = 4 means OK, anything else is an issue
-                        if result != ok_status:
+                        if result != self._msg.OK:
                             print(f"ERROR: Problem with command uid: {uid}")
                             print(f"ERROR: {rec}")
                             # TODO: Consider adding a RemoteActionAbort here if shit hits the fan
@@ -654,9 +673,11 @@ if __name__ == "__main__":
     config = {'socket_ip': '127.0.0.1',
               'socket_port': 5950,
               'host': 'DESKTOP-CNTF3JR',
-              'calibration_dir': 'C:\\Users\\user\\Documents\\Voyager\\DonutsCalibration',
+              'calibration_root': 'C:\\Users\\user\\Documents\\Voyager\\DonutsCalibration',
               'calibration_step_size_ms': 5000,
-              'calibration_n_iterations': 3}
+              'calibration_n_iterations': 3,
+              'calibration_exptime': 10,
+              'image_extension': ".fit"}
 
     voyager = Voyager(config)
     voyager.run()
