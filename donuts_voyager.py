@@ -1,6 +1,7 @@
 """
 Test script for guiding Voyager with donuts
 """
+import os
 import sys
 import socket as s
 import traceback
@@ -10,6 +11,7 @@ import queue
 import json
 import uuid
 import numpy as np
+import voyager_utils as vutils
 
 # TODO: Add logging
 # TODO: Add RemoteActionAbort call when things go horribly wrong
@@ -130,6 +132,7 @@ class Response():
         self.idd_recv = False
         self.uid_status = None
         self.idd_status = None
+        self.ok_status = ok_status
 
     def uid_received(self, status):
         """
@@ -154,7 +157,7 @@ class Response():
         uid code is supplied
         """
         return self.uid_recv and self.idd_recv and \
-               self.uid_status == ok_status and self.idd_status == 0
+               self.uid_status == self.ok_status and self.idd_status == 0
 
 class Voyager():
     """
@@ -190,6 +193,11 @@ class Voyager():
 
         # set up some callback parameters
         self._CB_LOOP_LIMIT = 10
+
+        # set up some calibration dir info
+        self.calibration_dir = config['calibration_dir']
+        if not os.path.exists(self.calibration_dir):
+            os.mkdir(self.calibration_dir)
 
     def run(self):
         """
@@ -233,6 +241,42 @@ class Voyager():
                         self._status = DonutsStatus.CALIBRATING
                         self.__send_donuts_message_to_voyager("DonutsCalibrationStart")
                         time.sleep(5)
+
+                        # set up calibration directory
+                        data_loc, _ = vutils.get_data_dir(self.calibration_dir)
+
+                        # point the telescope to 1h west of the meridian
+                        
+
+                        # create the filename
+
+                        # take an image
+
+                        # make it the reference for Donuts
+
+
+                        # pulse guide the telescope in 1 direction for N ms
+
+                        # take an image
+
+                        # calculate the shift and store result
+
+                        # loop for all directions
+
+                        # loop the loop M times
+
+                        # determine direction and ms/pix scaling
+
+
+                        # but first, let's test taking an image
+                        filename = f"{data_loc}\\test_0.fit"
+                        save_file = "true"
+
+                        shot_uuid = str(uuid.uuid4())
+                        exptime = 20
+                        msg.camera_shot(shot_uuid, self._comms_id, exptime, save_file, filename)
+                        self._comms_id += 1
+
                         self.__send_donuts_message_to_voyager("DonutsCalibrationDone")
                         self._status = DonutsStatus.IDLE
 
@@ -578,7 +622,8 @@ if __name__ == "__main__":
 
     config = {'socket_ip': '127.0.0.1',
               'socket_port': 5950,
-              'host': 'DESKTOP-CNTF3JR'}
+              'host': 'DESKTOP-CNTF3JR',
+              'calibration_dir': 'C:\\Users\\user\\Documents\\Voyager\\DonutsCalibration'}
 
     voyager = Voyager(config)
     voyager.run()
