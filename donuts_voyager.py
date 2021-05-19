@@ -242,7 +242,6 @@ class Voyager():
                         # send a dummy command with a small delay for now
                         self._status = DonutsStatus.CALIBRATING
                         self.__send_donuts_message_to_voyager("DonutsCalibrationStart")
-                        time.sleep(5)
 
                         # set up calibration directory
                         data_loc, _ = vutils.get_data_dir(self.calibration_dir)
@@ -625,14 +624,14 @@ class Voyager():
                     else:
                         print(f"WARNING: Waiting for uid: {uid}, ignoring response for uid: {rec_uid}")
 
-                if rec['Event'] in self._INFO_SIGNALS:
+                elif rec['Event'] in self._INFO_SIGNALS:
                     print(f"RECEIVED: {rec}")
 
                 else:
-                    print(f"WARNING: Unknown response {rec}")
+                    print(f"WARNING [1]: Unknown response {rec}")
 
             else:
-                print(f"WARNING: Unknown response {rec}")
+                print(f"WARNING [2]: Unknown response {rec}")
 
             # keep the connection alive while waiting
             now = time.time()
@@ -640,6 +639,9 @@ class Voyager():
             if time_since_last_poll > 5:
                 # ping the keep alive
                 self.__keep_socket_alive()
+
+            # increment event loop counter
+            cb_loop_count += 1
 
         # check was everything ok and raise an exception if not
         if not response.all_ok():
