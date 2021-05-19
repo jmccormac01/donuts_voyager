@@ -271,11 +271,15 @@ class Voyager():
                         # but first, let's test taking an image
                         filename = f"{data_loc}\\test_0.fit"
                         save_file = "true"
-
                         shot_uuid = str(uuid.uuid4())
                         exptime = 20
-                        msg.camera_shot(shot_uuid, self._comms_id, exptime, save_file, filename)
-                        self._comms_id += 1
+
+                        try:
+                            message_shot = msg.camera_shot(shot_uuid, self._comms_id, exptime, save_file, filename)
+                            self.__send_two_way_message_to_voyager(message_shot, msg.OK)
+                            self._comms_id += 1
+                        except Exception:
+                            self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename}")
 
                         self.__send_donuts_message_to_voyager("DonutsCalibrationDone")
                         self._status = DonutsStatus.IDLE
