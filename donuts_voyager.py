@@ -31,6 +31,7 @@ from PID import PID
 # pylint: disable=too-many-branches
 # pylint: disable=too-many-locals
 # pylint: disable=too-many-nested-blocks
+# pylint: disable=too-many-lines
 # pylint: disable=too-many-instance-attributes
 # pylint: disable=broad-except
 
@@ -66,6 +67,26 @@ class Message():
 
         Also return the response code that says things
         went well. Typically 4
+
+        Parameters
+        ----------
+        uid : string
+            unique ID for this command
+        idd : int
+            unique ID for this command
+        direction : dict
+            X and Y directional information for a correction
+        duration : dict
+            X and Y pulse guide durations for a correction
+
+        Returns
+        -------
+        message : dict
+            JSON dumps ready dict for a pulse guide command
+
+        Raises
+        ------
+        None
         """
         message = {"method": "RemotePulseGuide",
                    "params": {"UID": uid,
@@ -83,6 +104,28 @@ class Message():
 
         Also return the response code that says things
         went well. Typically 4
+
+        Parameters
+        ----------
+        uid : string
+            unique ID for this command
+        idd : int
+            unique ID for this command
+        exptime : int
+            exposure time of the image to be taken
+        save_file : boolean
+            flag to save the file or not
+        filename : string
+            path to the file for saving
+
+        Returns
+        -------
+        message : dict
+            JSON dumps ready dict for a pulse guide command
+
+        Raises
+        ------
+        None
         """
         # TODO: add more features? (filter etc?)
         # do we need that?
@@ -113,12 +156,25 @@ class Message():
         """
         Create a message object for repointing the telescope
 
-        Also return the response code that says things
-        went well. Typically 4
+        Parameters
+        ----------
+        uid : string
+            unique ID for this command
+        idd : int
+            unique ID for this command
+        ra : string
+            RA of the target field (HH MM SS.ss)
+        dec : string
+            DEC of the target field (DD MM SS.ss)
 
-        RA and DEC should be in HH MM SS.ss ±DD MM SS.ss format
-        In this format we set IsText = true and set 0's for RA and DEC.
-        We give the coords in the RAText and DECText arguments
+        Returns
+        -------
+        message : dict
+            JSON dumps ready dict for a pulse guide command
+
+        Raises
+        ------
+        None
         """
         message = {"method": "RemotePrecisePointTarget",
                    "params": {"UID": uid,
@@ -138,6 +194,17 @@ class Response():
     def __init__(self, uid, idd, ok_status):
         """
         Initialise response object
+
+        Parameters
+        ----------
+        uid : string
+            unique ID for this command
+        idd : int
+            unique ID for this command
+        ok_staus : int
+            command return value that we search for
+            to ensure everything went ok. Any other
+            value means there was an error
         """
         self.uid = uid
         self.idd = idd
@@ -150,6 +217,19 @@ class Response():
     def uid_received(self, status):
         """
         Update uuid response as received
+
+        Parameters
+        ----------
+        status : int
+            response code to command for given uid
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        None
         """
         self.uid_recv = True
         self.uid_status = status
@@ -157,6 +237,18 @@ class Response():
     def idd_received(self, status):
         """
         Update uuid response as received
+
+        Parameters
+        ----------
+        status : int
+            response code to command for given idd
+
+        Returns
+        -------
+
+        Raises
+        ------
+        None
         """
         self.idd_recv = True
         self.idd_status = status
@@ -167,7 +259,21 @@ class Response():
         Return True if so and False if not
 
         idd is left hardcoded to 0
-        uid code is supplied
+        uid code is supplied on init
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        all_ok : boolean
+            Did we get a good response for the command submitted?
+            True of False
+
+        Raises
+        ------
+        None
         """
         return self.uid_recv and self.idd_recv and \
                self.uid_status == self.ok_status and self.idd_status == 0
@@ -178,7 +284,12 @@ class Voyager():
     """
     def __init__(self, config):
         """
-        Initialise the class
+        Initialise the Voyager autoguiding class instance
+
+        Parameters
+        ----------
+        config : dict
+            Configuration information
         """
         self.socket = None
         self.socket_ip = config['socket_ip']
@@ -271,7 +382,22 @@ class Voyager():
 
     def run(self):
         """
-        Open a connection and maintain it with Voyager
+        Open a connection and maintain it with Voyager.
+        Listen to autoguiding and calibration jobs.
+        Dispatch them and continue listening until
+        told to abort.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        None
         """
         # spawn the guide calculation thread
         guide_thread = threading.Thread(target=self.__guide_loop)
@@ -400,7 +526,21 @@ class Voyager():
 
     def __guide_loop(self):
         """
-        Analyse incoming images for guiding offsets
+        Analyse incoming images for guiding offsets.
+        Results are communicated to the main run thread
+        using the results_queue
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        None
         """
         while 1:
             # TODO: add something to permit ending this thread cleanly
@@ -474,7 +614,19 @@ class Voyager():
 
     def __open_socket(self):
         """
-        Open a connection to Voyager
+        Open a socket connection to Voyager
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        None
         """
         self.socket = s.socket(s.AF_INET, s.SOCK_STREAM)
         self.socket.settimeout(1.0)
@@ -489,12 +641,43 @@ class Voyager():
     def __close_socket(self):
         """
         Close the socket once finished
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        None
         """
         self.socket.close()
 
     def __send(self, message, n_attempts=3):
         """
-        Send a message to Voyager
+        Low level message sending method. Note no listening
+        is done here.
+
+        Parameters
+        ----------
+        message : string
+            message to communicate to Voyager
+        n_attempts: int, optional
+            default = 3
+            max number of tries to send, before giving up
+
+        Returns
+        -------
+        sent : boolean
+            Did the message send ok?
+            True or False
+
+        Raises
+        ------
+        None
         """
         sent = False
         while not sent and n_attempts > 0:
@@ -516,6 +699,21 @@ class Voyager():
     def __receive(self, n_bytes=1024):
         """
         Receive a message of n_bytes in length from Voyager
+
+        Parameters
+        ----------
+        n_bytes : int, optional
+            Number of bytes to read from socket
+            default = 1024
+
+        Returns
+        -------
+        message : dict
+            json parsed response from Voyager
+
+        Raises
+        ------
+        None
         """
         try:
             message = json.loads(self.socket.recv(n_bytes))
@@ -525,7 +723,21 @@ class Voyager():
 
     def __keep_socket_alive(self):
         """
-        Convenience method to keep socket open
+        Convenience method to keep socket open.
+        Voyager's internal polling is reset upon
+        receipt of this message
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        None
         """
         now = str(time.time())
         polling = {"Event": "Polling",
@@ -544,6 +756,26 @@ class Voyager():
         Take a jsonrpc response and figure out
         what happened. If there is an error result is
         missing and error object is there instead
+
+        Parameters
+        ----------
+        response : dict
+            jsonrpc response from Voyager
+
+        Returns
+        -------
+        rec_idd : int
+            response_id, used to match async commands/responses
+        result : int
+            result code, 0 = ok, all else = not ok
+        error_code : int
+            used to determine type of error
+        error_msg : string
+            description of any error
+
+        Raises
+        ------
+        None
         """
         # get the response ID
         rec_idd = response['id']
@@ -563,6 +795,26 @@ class Voyager():
     def __parse_remote_action_result(response):
         """
         Take a remote action result and see what happened
+
+        Parameters
+        ----------
+        response : dict
+            Voyager RemoteActionResult response
+
+        Returns
+        -------
+        uid : string
+            unique id for the corresponding command
+        result : int
+            result code, 4 = ok, all else = not ok
+        motivo : string
+            description of any error
+        param_ret : dict
+            parameters returned by command
+
+        Raises
+        ------
+        None
         """
         result = response['ActionResultInt']
         uid = response['UID']
@@ -573,6 +825,22 @@ class Voyager():
     def __send_donuts_message_to_voyager(self, event, error=None):
         """
         Acknowledge a command from Voyager
+
+        Parameters
+        ----------
+        event : string
+            name of event to send to Voyager
+        error : string, optional
+            description of donuts error
+            default = None
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        None
         """
         now = str(time.time())
         message = {"Event": event,
@@ -591,6 +859,21 @@ class Voyager():
         """
         If things go pear shaped and donuts is quitting,
         tell Voyager to abort this UID:IDD also
+
+        Parameters
+        ----------
+        uid : string
+            unique ID for this command
+        idd : int
+            unique ID for this command
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        None
         """
         message = {'method': 'RemoteActionAbort',
                    'params': {'UID': uid},
@@ -611,6 +894,23 @@ class Voyager():
 
         Wait for the initial jsonrpc response, act accordingly
         If all good, wait for the RemoteActionResult event, act accordingly
+
+        The helper Message class (above) allows for easy creation
+        of the message objects (dictionaries) to pass to this method
+
+        Parameters
+        ----------
+        message : dict
+            A message object containing the relevant json info
+            for the command we want to send to Voyager
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        Exception : When unable to send message
         """
         # grab this message's UID and ID values
         uid = message['params']['UID']
@@ -655,7 +955,7 @@ class Voyager():
                             logging.error(f"{err_code} {err_msg}")
                             # Leo said if result!=0, we have a serious issue. Therefore abort.
                             self.__send_abort_message_to_voyager(uid, idd)
-                            raise Exception("ERROR: Could not send pulse guide command")
+                            raise Exception(f"ERROR: Could not send message {msg_str}")
                         else:
                             logging.info(f"Command id: {idd} returned correctly")
                             # add the response if things go well. if things go badly we're quitting anyway
@@ -717,11 +1017,28 @@ class Voyager():
 
         # check was everything ok and raise an exception if not
         if not response.all_ok():
-            raise Exception("ERROR: Could not send pulse guide command")
+            raise Exception(f"ERROR: Could not send message {msg_str}")
 
     def __calibration_filename(self, direction, pulse_time):
         """
         Return a calibration filename
+
+        Parameters
+        ----------
+        diection : string
+            Direction of offset applied to this calibration image
+        pulse_time : int
+            Number of ms the telescope was pulse guided for
+            in the direction above
+
+        Returns
+        -------
+        path : string
+            Filename/path to use for saving a calibration image
+
+        Raises
+        ------
+        None
         """
         return f"{self._calibration_dir}\\step_{self._image_id:06d}_d{direction}_{pulse_time}ms{self.image_extension}"
 
@@ -730,6 +1047,23 @@ class Voyager():
         """
         Take a donuts shift object and work out
         the direction of the shift and the distance
+
+        Parameters
+        ----------
+        shift : Donuts.shift
+            A shift object containing the offset between
+            two images from Donuts
+
+        Returns
+        -------
+        direction : string
+            The direction of the offset
+        magnitude : float
+            The magnitude of the shift in pixels
+
+        Raises
+        ------
+        None
         """
         sx = shift.x.value
         sy = shift.y.value
@@ -749,9 +1083,23 @@ class Voyager():
 
     def __calibrate_donuts(self):
         """
-        Run the calibration routine
+        Run the calibration routine. Here we take and
+        image, nudge the telescope, take another and
+        repeat for the 4 directions. Then we use donuts
+        to determine the shift and calibrate the pulse
+        guide command.
 
-        Take in the message object so we can prepare commands
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        None
         """
         # set up objects to hold calib info
         # TODO: uncomment out the actual routine when we go on sky
@@ -827,7 +1175,20 @@ class Voyager():
 
     def __initialise_pid_loop(self):
         """
-        (Re)initialise the PID loop
+        (Re)initialise the PID loop objects
+        for the X and Y directions
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        None
         """
         # initialise the PID loop with the coeffs from config
         self._pid_x = PID(self.pid_x_p, self.pid_x_i, self.pid_x_d)
@@ -838,13 +1199,46 @@ class Voyager():
 
     def __initialise_guide_buffer(self):
         """
-        (Re) initialise the ag measurement buffer
+        (Re) initialise the ag measurement buffer.
+
+        Clears the buffer lists for a new field/filter
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        None
         """
         self._buff_x = []
         self._buff_y = []
 
     def __process_guide_correction(self, shift):
         """
+        Take a Donuts shift object. Analyse the x and y
+        components. Compare them to the recent history of
+        corrections and reject outliers. Additionally, pass
+        x and y corrections through a PID loop and trim results
+        to the max allowed guide correction, if required
+
+        Parameters
+        ----------
+        shift : Donuts.shift object
+            Contains the X and Y offset values for a
+            recently analysed image
+
+        Returns
+        -------
+        direction : dict
+            Correction directions to apply for X and Y
+        duration : dict
+            Correction pulse guide durations to apply
+            for X and Y
         """
         # get x and y from shift object
         x = shift.x.value
