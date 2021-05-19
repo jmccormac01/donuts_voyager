@@ -462,8 +462,8 @@ class Voyager():
                             # fetch the results from the queue
                             direction, duration = self._results_queue.get()
 
-                            # check for a valid correction response
-                            if direction is not None and duration is not None:
+                            # only try guiding if a valid correction was returned, otherwise, do nothing
+                            if duration['x'] != 0 or duration['y'] != 0:
                                 logging.info(f"CORRECTION: {direction['x']}:{duration['x']} {direction['y']}:{duration['y']}")
 
                                 # send a pulseGuide command followed by a loop for responses
