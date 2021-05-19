@@ -1367,17 +1367,17 @@ if __name__ == "__main__":
               "dec_keyword": "DEC",
               "ra_axis": "y",
               "pid_coeffs": {"x": {"p": 0.70, "i": 0.02, "d": 0.0},
-                             "y": {"p": 0.50, "i": 0.02, "d": 0.0},
+                             "y": {"p": 0.70, "i": 0.02, "d": 0.0},
                              "set_x": 0.0,
                              "set_y": 0.0},
               "guide_buffer_length": 20,
               "guide_buffer_sigma": 10,
               "max_error_pixels": 20,
-              "pixels_to_time": {"+x": 69.24,
-                                 "-x": 69.57,
-                                 "+y": 69.27,
-                                 "-y": 69.31},
-              "guide_directions": {"-y": 0, "+y": 1, "-x": 2, "+x": 3},
+              "pixels_to_time": {"+x": 90.59,
+                                 "-x": 90.93,
+                                 "+y": 90.56,
+                                 "-y": 91.09},
+              "guide_directions": {"+y": 0, "-y": 1, "+x": 2, "-x": 3},
               }
 
     # set up the log file
