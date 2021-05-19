@@ -199,6 +199,7 @@ class Voyager():
         if not os.path.exists(self.calibration_dir):
             os.mkdir(self.calibration_dir)
         self.calibration_step_size_ms = config['calibration_step_size_ms']
+        self.calibration_n_iterations = config['calibration_n_iterations']
 
     def run(self):
         """
