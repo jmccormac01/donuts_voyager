@@ -66,7 +66,6 @@ def get_data_dir(root_dir, data_subdir=""):
     token = get_am_or_pm()
     d = date.today()-timedelta(days=token)
     night = "{:d}{:02d}{:02d}".format(d.year, d.month, d.day)
-    night_str = "{:d}-{:02d}-{:02d}".format(d.year, d.month, d.day)
     data_loc = "{}\\{}".format(root_dir, night)
     # adds capability for data to live in folders
     # inside the nightly folder, as for saintex
@@ -74,4 +73,4 @@ def get_data_dir(root_dir, data_subdir=""):
         data_loc = f"{data_loc}\\{data_subdir}"
     if not os.path.exists(data_loc):
         os.mkdir(data_loc)
-    return data_loc, night_str
+    return data_loc, night

@@ -7,21 +7,32 @@ import socket as s
 import traceback
 import time
 import threading
+import logging
 import queue
 import json
 import uuid
 from collections import defaultdict
 import numpy as np
+from astropy.io import fits
 from donuts import Donuts
 import voyager_utils as vutils
+from PID import PID
 
-# TODO: Add logging
+# TODO: Add logging to database
 # TODO: Add RemoteActionAbort call when things go horribly wrong
 # TODO: Determine how to trigger/abort donuts script from drag_script
 # this has been ignored for now while testing
 
 # pylint: disable=line-too-long
 # pylint: disable=invalid-name
+# pylint: disable=logging-fstring-interpolation
+# pylint: disable=too-few-public-methods
+# pylint: disable=too-many-statements
+# pylint: disable=too-many-branches
+# pylint: disable=too-many-locals
+# pylint: disable=too-many-nested-blocks
+# pylint: disable=too-many-instance-attributes
+# pylint: disable=broad-except
 
 class DonutsStatus():
     """
@@ -180,6 +191,14 @@ class Voyager():
         self._voyager_path_keyword = "FITPathAndName"
         self._INFO_SIGNALS = ["Polling", "Version", "Signal", "NewFITReady"]
 
+        # set up important image header keywords
+        self.filter_keyword = config['filter_keyword']
+        self.field_keyword = config['field_keyword']
+        self.ra_keyword = config['ra_keyword']
+        self.dec_keyword = config['dec_keyword']
+        self.ra_axis = config['ra_axis']
+        self._declination = None
+
         # keep track of current status
         self._status = DonutsStatus.UNKNOWN
 
@@ -197,127 +216,58 @@ class Voyager():
         # set up a queue to send back results from guide_loop
         self._results_queue = queue.Queue(maxsize=1)
 
-        # set up some callback parameters
-        self._CB_LOOP_LIMIT = 10
-
         # set up some calibration dir info
         self.calibration_root = config['calibration_root']
         if not os.path.exists(self.calibration_root):
             os.mkdir(self.calibration_root)
         # this calibration directory inside calibration root gets made if we calibrate
-        self.calibration_dir = None
+        self._calibration_dir = None
         self.calibration_step_size_ms = config['calibration_step_size_ms']
         self.calibration_n_iterations = config['calibration_n_iterations']
         self.calibration_exptime = config['calibration_exptime']
 
-    def __calibration_filename(self, direction, pulse_time):
-        """
-        Return a calibration filename
-        """
-        return f"{self.calibration_dir}\\step_{self._image_id:06d}_d{direction}_{pulse_time}ms{self.image_extension}"
+        # set up a temporary dict to hold reference images
+        # this will be a datebase later
+        # TODO: remove this later
+        self._ref_store = defaultdict(dict)
+        # add some places to keep track of reference images change overs
+        self._last_field = None
+        self._last_filter = None
+        self._donuts_ref = None
 
-    @staticmethod
-    def __determine_shift_direction_and_magnitude(shift):
-        """
-        Take a donuts shift object and work out
-        the direction of the shift and the distance
-        """
-        sx = shift.x.value
-        sy = shift.y.value
-        if abs(sx) > abs(sy):
-            if sx > 0:
-                direction = '-x'
-            else:
-                direction = '+x'
-            magnitude = abs(sx)
-        else:
-            if sy > 0:
-                direction = '-y'
-            else:
-                direction = '+y'
-            magnitude = abs(sy)
-        return direction, magnitude
+        # set up the PID loop coeffs etc
+        self.pid_x_p = config["pid_coeffs"]["x"]["p"]
+        self.pid_x_i = config["pid_coeffs"]["x"]["i"]
+        self.pid_x_d = config["pid_coeffs"]["x"]["d"]
+        self.pid_x_setpoint = config["pid_coeffs"]["set_x"]
 
-    def __calibrate_donuts(self):
-        """
-        Run the calibration routine
+        self.pid_y_p = config["pid_coeffs"]["y"]["p"]
+        self.pid_y_i = config["pid_coeffs"]["y"]["i"]
+        self.pid_y_d = config["pid_coeffs"]["y"]["d"]
+        self.pid_y_setpoint = config["pid_coeffs"]["set_y"]
 
-        Take in the message object so we can prepare commands
-        """
-        # set up objects to hold calib info
-        direction_store = defaultdict(list)
-        scale_store = defaultdict(list)
+        # placeholders for actual PID objects
+        self._pid_x = None
+        self._pid_y = None
 
-        # set up calibration directory
-        self.calibration_dir, _ = vutils.get_data_dir(self.calibration_root)
+        # ag correction buffers - used for outlier rejection
+        self.guide_buffer_length = config["guide_buffer_length"]
+        self.guide_buffer_sigma = config["guide_buffer_sigma"]
+        self._buff_x = None
+        self._buff_y = None
+        self._buff_x_sigma = None
+        self._buff_y_sigma = None
 
-        # point the telescope to 1h west of the meridian
+        # set up max error in pixels
+        self.max_error_pixels = config['max_error_pixels']
 
-        # calculate the shift and store result
+        # calibrated pixels to time ratios and the directions
+        self.pixels_to_time = config['pixels_to_time']
+        self.guide_directions = config['guide_directions']
 
-        # determine direction and ms/pix scaling
-
-        # get the reference filename
-        filename = self.__calibration_filename("R", 0)
-        shot_uuid = str(uuid.uuid4())
-        # take an image at the current location
-        try:
-            message_shot = self._msg.camera_shot(shot_uuid, self._comms_id, self.calibration_exptime, "true", filename)
-            self.__send_two_way_message_to_voyager(message_shot)
-            self._comms_id += 1
-            self._image_id += 1
-        except Exception:
-            self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename}")
-
-        # TODO: uncomment out the actual routine when we go on sky
-        # make the image we took the reference image
-        #donuts_ref = Donuts(filename)
-
-        # loop over the 4 directions for the requested number of iterations
-        for _ in range(self.calibration_n_iterations):
-            for i in range(4):
-                # pulse guide in direction i
-                try:
-                    uuid_i = str(uuid.uuid4())
-                    message_pg = self._msg.pulse_guide(uuid_i, self._comms_id, i, self.calibration_step_size_ms)
-                    # send pulse guide command in direction i
-                    self.__send_two_way_message_to_voyager(message_pg)
-                    self._comms_id += 1
-                except Exception:
-                    # send a recentering error
-                    self.__send_donuts_message_to_voyager("DonutsRecenterError", f"Failed to PulseGuide {i} {self.calibration_step_size_ms}")
-                    traceback.print_exc()
-
-                # take an image
-                try:
-                    filename = self.__calibration_filename(i, self.calibration_step_size_ms)
-                    shot_uuid = str(uuid.uuid4())
-                    message_shot = self._msg.camera_shot(shot_uuid, self._comms_id, self.calibration_exptime, "true", filename)
-                    self.__send_two_way_message_to_voyager(message_shot)
-                    self._comms_id += 1
-                    self._image_id += 1
-                except Exception:
-                    self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename}")
-
-                # TODO: uncomment out the actual routine when we go on sky
-                # measure the offset and update the reference image
-                #shift = donuts_ref.measure_shift(filename)
-                #direction, magnitude = self.__determine_shift_direction_and_magnitude(shift)
-                #direction_store[i].append(direction)
-                #scale_store[i].append(magnitude)
-                #donuts_ref = Donuts(filename)
-
-        # TODO: uncomment out the actual routine when we go on sky
-        # now do some analysis on the run from above
-        # check that the directions are the same every time for each orientation
-        #for direc in direction_store:
-        #    print(direction_store[direc])
-        #    assert len(set(direction_store[direc])) == 1
-        #    print(f"{direc}: {direction_store[direc][0]}")
-        # now work out the ms/pix scales from the calbration run above
-        #for direc in scale_store:
-        #    ratio = self.calibration_step_size_ms/np.average(scale_store[direc])
-        #    print(f"{direc}: {ratio:.2f} ms/pixel")
+        # initialise all the things
+        self.__initialise_guide_buffer()
+        self.__initialise_pid_loop()
 
     def run(self):
         """
@@ -350,7 +300,7 @@ class Voyager():
 
                     # do nothing for events that just give us some info
                     if rec['Event'] in self._INFO_SIGNALS:
-                        print(f"RECEIVED: {rec}")
+                        logging.info(f"RECEIVED: {rec}")
 
                     # handle the autoguider calibration event
                     elif rec['Event'] == "DonutsCalibrationRequired":
@@ -367,7 +317,7 @@ class Voyager():
 
                     # handle the autoguiding event
                     elif rec['Event'] == "DonutsRecenterRequired":
-                        print(f"RECEIVED: {rec}")
+                        logging.info(f"RECEIVED: {rec}")
                         # if guider is IDLE, do stuff, otherwise do nothing
                         if self._status == DonutsStatus.IDLE:
                             # set the current mode to guiding
@@ -385,47 +335,52 @@ class Voyager():
 
                             # fetch the results from the queue
                             direction, duration = self._results_queue.get()
-                            print(f"CORRECTION: {direction['x']}:{duration['x']} {direction['y']}:{duration['y']}")
 
-                            # send a pulseGuide command followed by a loop for responses
-                            # this must be done before the next command can be sent
-                            # if both are sent ok, we send the DonutsRecenterDone, otherwise we send an error
-                            try:
-                                # make x correction message
-                                uuid_x = str(uuid.uuid4())
-                                message_x = self._msg.pulse_guide(uuid_x, self._comms_id, direction['x'], duration['x'])
-                                # send x correction
-                                self.__send_two_way_message_to_voyager(message_x)
-                                self._comms_id += 1
+                            # check for a valid correction response
+                            if direction is not None and duration is not None:
+                                logging.info(f"CORRECTION: {direction['x']}:{duration['x']} {direction['y']}:{duration['y']}")
 
-                                # make y correction message
-                                uuid_y = str(uuid.uuid4())
-                                message_y = self._msg.pulse_guide(uuid_y, self._comms_id, direction['y'], duration['y'])
-                                # send the y correction
-                                self.__send_two_way_message_to_voyager(message_y)
-                                self._comms_id += 1
+                                # send a pulseGuide command followed by a loop for responses
+                                # this must be done before the next command can be sent
+                                # if both are sent ok, we send the DonutsRecenterDone, otherwise we send an error
+                                try:
+                                    # make x correction message
+                                    uuid_x = str(uuid.uuid4())
+                                    message_x = self._msg.pulse_guide(uuid_x, self._comms_id, direction['x'], duration['x'])
+                                    # send x correction
+                                    self.__send_two_way_message_to_voyager(message_x)
+                                    self._comms_id += 1
 
-                                # send a DonutsRecenterDone message
-                                self.__send_donuts_message_to_voyager("DonutsRecenterDone")
-                            except Exception:
-                                # send a recentering error
-                                self.__send_donuts_message_to_voyager("DonutsRecenterError", f"Failed to PulseGuide {last_image}")
-                                traceback.print_exc()
+                                    # make y correction message
+                                    uuid_y = str(uuid.uuid4())
+                                    message_y = self._msg.pulse_guide(uuid_y, self._comms_id, direction['y'], duration['y'])
+                                    # send the y correction
+                                    self.__send_two_way_message_to_voyager(message_y)
+                                    self._comms_id += 1
+
+                                    # send a DonutsRecenterDone message
+                                    self.__send_donuts_message_to_voyager("DonutsRecenterDone")
+                                except Exception:
+                                    # send a recentering error
+                                    self.__send_donuts_message_to_voyager("DonutsRecenterError", f"Failed to PulseGuide {last_image}")
+                                    traceback.print_exc()
+                            else:
+                                logging.info(f"No guide correction returned for {last_image}, skipping...")
 
                             # set the current mode back to IDLE
                             self._status = DonutsStatus.IDLE
 
                         # ignore commands if we're already doing something
                         else:
-                            print("WARNING: Donuts is busy, skipping...")
+                            logging.warning("Donuts is busy, skipping...")
                             # send Voyager a start and a done command to keep it happy
                             self.__send_donuts_message_to_voyager("DonutsRecenterStart")
                             self.__send_donuts_message_to_voyager("DonutsRecenterDone")
 
                     # handle the abort event
                     elif rec['Event'] == "DonutsAbort":
-                        print(f"RECEIVED: {rec}")
-                        print("EVENT: Donuts abort requested, dying peacefully")
+                        logging.info(f"RECEIVED: {rec}")
+                        logging.info("EVENT: Donuts abort requested, dying peacefully")
                         # close the socket
                         self.__close_socket()
                         # exit
@@ -433,8 +388,8 @@ class Voyager():
 
                     # erm, something has gone wrong
                     else:
-                        print('ERROR: Oh dear, something unforseen has occurred. Here\'s what...')
-                        print(f"ERROR: Failed parsing {rec}")
+                        logging.error('Oh dear, something unforseen has occurred. Here\'s what...')
+                        logging.error(f"Failed parsing {rec}")
 
             # do we need to poll again?
             now = time.time()
@@ -455,16 +410,67 @@ class Voyager():
                 while self._latest_guide_frame is None:
                     self._guide_condition.wait()
 
-                frame_path = self._latest_guide_frame
+                last_image = self._latest_guide_frame
                 self._latest_guide_frame = None
-                # TODO work out guide correction here
-                # Update PID loop
 
-                # test case
-                print(f"INFO: filename = {frame_path}")
-                direction = {"x": 0, "y": 2}
-                duration = {"x": 1000, "y": 500}
-                self._results_queue.put((direction, duration))
+                # check if we're still observing the same field
+                # pylint: disable=no-member
+                with fits.open(last_image) as ff:
+                    # current field and filter?
+                    current_filter = ff[0].header[self.filter_keyword]
+                    current_field = ff[0].header[self.field_keyword]
+                    self._declination = ff[0].header[self.dec_keyword]
+                # pylint: enable=no-member
+
+                # if something changes or we haven't started yet, sort out a reference image
+                if current_field != self._last_field or current_filter != self._last_filter or self._donuts_ref is None:
+                    # reset PID loop and guide buffer
+                    self.__initialise_pid_loop()
+                    self.__initialise_guide_buffer()
+
+                    # Look for a reference image for this field/filter
+                    # TODO: add db backend here, see acp_ag.py for layout
+                    # add new reference images to the database
+                    # copy them to special storage area too, for now we won't bother
+                    try:
+                        ref_file = self._ref_store[current_field][current_filter]
+                        do_correction = True
+                    except KeyError:
+                        # nothing in the store for this field/filter, so add it for later
+                        self._ref_store[current_field][current_filter] = last_image
+                        # use this image as the reference
+                        ref_file = last_image
+                        # skip the correction as we just made a new reference
+                        do_correction = False
+
+                    # make this image the reference, update the last field/filter also
+                    self._donuts_ref = Donuts(ref_file)
+                else:
+                    do_correction = True
+
+                # update the last field/filter values
+                self._last_field = current_field
+                self._last_filter = current_filter
+
+                # do the correction if required
+                if do_correction:
+                    # work out shift here
+                    shift = self._donuts_ref.measure_shift(last_image)
+                    logging.info(f"Raw shift measured: x:{shift.x.value:.2f} y:{shift.y.value:.2f}")
+
+                    # process the shifts and add the results to the queue
+                    direction, duration = self.__process_guide_correction(shift)
+
+                    # add the post-PID values to the results queue
+                    self._results_queue.put((direction, duration))
+
+                else:
+                    # return a null correction and do nothing
+                    direction = {"x": self.guide_directions["+x"],
+                                 "y": self.guide_directions["+y"]}
+                    duration = {"x": 0, "y": 0}
+                    self._results_queue.put((direction, duration))
+
 
     def __open_socket(self):
         """
@@ -475,8 +481,8 @@ class Voyager():
         try:
             self.socket.connect((self.socket_ip, self.socket_port))
         except s.error:
-            print('ERROR: Voyager socket connect failed!')
-            print('ERROR: Check the application interface is running!')
+            logging.fatal('Voyager socket connect failed!')
+            logging.fatal('Check the application interface is running!')
             traceback.print_exc()
             sys.exit(1)
 
@@ -499,9 +505,9 @@ class Voyager():
                 sent = True
                 # update the last poll time
                 self._last_poll_time = time.time()
-                print(f"SENT: {message.rstrip()}")
+                logging.info(f"SENT: {message.rstrip()}")
             except:
-                print(f"ERROR: CANNOT SEND {message} TO VOYAGER [{n_attempts}]")
+                logging.error(f"CANNOT SEND {message} TO VOYAGER [{n_attempts}]")
                 traceback.print_exc()
                 sent = False
 
@@ -629,15 +635,15 @@ class Voyager():
                     # send the command
                     sent = self.__send(msg_str)
                     if sent:
-                        print(f"CALLBACK ADD: {uid}:{idd}")
+                        logging.info(f"CALLBACK ADD: {uid}:{idd}")
 
 
-                print(f"INFO: JSONRPC CALLBACK LOOP [{cb_loop_count+1}]: {uid}:{idd}")
+                logging.debug(f"JSONRPC CALLBACK LOOP [{cb_loop_count+1}]: {uid}:{idd}")
                 rec = self.__receive()
 
                 # handle the jsonrpc response (1 of 2 responses needed)
                 if "jsonrpc" in rec.keys():
-                    print(f"RECEIVED: {rec}")
+                    logging.info(f"RECEIVED: {rec}")
                     rec_idd, result, err_code, err_msg = self.__parse_jsonrpc(rec)
 
                     # we only care bout IDs for the commands we just sent right now
@@ -645,17 +651,17 @@ class Voyager():
                         # result = 0 means OK, anything else is bad
                         # leave this jsonrpc check hardcoded
                         if result != 0:
-                            print(f"ERROR: Problem with command id: {idd}")
-                            print(f"ERROR: {err_code} {err_msg}")
+                            logging.error(f"Problem with command id: {idd}")
+                            logging.error(f"{err_code} {err_msg}")
                             # Leo said if result!=0, we have a serious issue. Therefore abort.
                             self.__send_abort_message_to_voyager(uid, idd)
                             raise Exception("ERROR: Could not send pulse guide command")
                         else:
-                            print(f"INFO: Command id: {idd} returned correctly")
+                            logging.info(f"Command id: {idd} returned correctly")
                             # add the response if things go well. if things go badly we're quitting anyway
                             response.idd_received(result)
                     else:
-                        print(f"WARNING: Waiting for idd: {idd}, ignoring response for idd: {rec_idd}")
+                        logging.warning(f"Waiting for idd: {idd}, ignoring response for idd: {rec_idd}")
 
                 # increment loop counter to keep track of how long we're waiting
                 cb_loop_count += 1
@@ -663,41 +669,41 @@ class Voyager():
             # if we exit the while loop above we can assume that
             # we got a jsonrpc response to the pulse guide command
             # here we start listening for it being done
-            print(f"INFO: EVENT CALLBACK LOOP [{cb_loop_count+1}]: {uid}:{idd}")
+            logging.debug(f"EVENT CALLBACK LOOP [{cb_loop_count+1}]: {uid}:{idd}")
             rec = self.__receive()
 
             # handle the RemoteActionResult response (2 of 2 needed)
             if "Event" in rec.keys():
 
                 if rec['Event'] == "RemoteActionResult":
-                    print(f"RECEIVED: {rec}")
+                    logging.info(f"RECEIVED: {rec}")
                     rec_uid, result, *_ = self.__parse_remote_action_result(rec)
 
                     # check we have a response for the thing we want
                     if rec_uid == uid:
                         # result = 4 means OK, anything else is an issue
                         if result != self._msg.OK:
-                            print(f"ERROR: Problem with command uid: {uid}")
-                            print(f"ERROR: {rec}")
+                            logging.error(f"Problem with command uid: {uid}")
+                            logging.error(f"{rec}")
                             # TODO: Consider adding a RemoteActionAbort here if shit hits the fan
                         else:
-                            print(f"INFO: Command uid: {uid} returned correctly")
+                            logging.info(f"Command uid: {uid} returned correctly")
                             # add the response, regardless if it's good or bad, so we can end this loop
                             response.uid_received(result)
                     else:
-                        print(f"WARNING: Waiting for uid: {uid}, ignoring response for uid: {rec_uid}")
+                        logging.warning(f"Waiting for uid: {uid}, ignoring response for uid: {rec_uid}")
 
                 elif rec['Event'] in self._INFO_SIGNALS:
-                    print(f"RECEIVED: {rec}")
+                    logging.info(f"RECEIVED: {rec}")
 
                 else:
-                    print(f"WARNING [1]: Unknown response {rec}")
+                    logging.warning(f"Unknown response {rec}")
 
             # no response? do nothing
             elif not rec.keys():
                 pass
             else:
-                print(f"WARNING [2]: Unknown response {rec}")
+                logging.warning(f"Unknown response {rec}")
 
             # keep the connection alive while waiting
             now = time.time()
@@ -713,16 +719,280 @@ class Voyager():
         if not response.all_ok():
             raise Exception("ERROR: Could not send pulse guide command")
 
+    def __calibration_filename(self, direction, pulse_time):
+        """
+        Return a calibration filename
+        """
+        return f"{self._calibration_dir}\\step_{self._image_id:06d}_d{direction}_{pulse_time}ms{self.image_extension}"
+
+    @staticmethod
+    def __determine_shift_direction_and_magnitude(shift):
+        """
+        Take a donuts shift object and work out
+        the direction of the shift and the distance
+        """
+        sx = shift.x.value
+        sy = shift.y.value
+        if abs(sx) > abs(sy):
+            if sx > 0:
+                direction = '-x'
+            else:
+                direction = '+x'
+            magnitude = abs(sx)
+        else:
+            if sy > 0:
+                direction = '-y'
+            else:
+                direction = '+y'
+            magnitude = abs(sy)
+        return direction, magnitude
+
+    def __calibrate_donuts(self):
+        """
+        Run the calibration routine
+
+        Take in the message object so we can prepare commands
+        """
+        # set up objects to hold calib info
+        # TODO: uncomment out the actual routine when we go on sky
+        #direction_store = defaultdict(list)
+        #scale_store = defaultdict(list)
+
+        # set up calibration directory
+        self._calibration_dir, _ = vutils.get_data_dir(self.calibration_root)
+
+        # point the telescope to 1h west of the meridian
+
+        # get the reference filename
+        filename = self.__calibration_filename("R", 0)
+        shot_uuid = str(uuid.uuid4())
+        # take an image at the current location
+        try:
+            message_shot = self._msg.camera_shot(shot_uuid, self._comms_id, self.calibration_exptime, "true", filename)
+            self.__send_two_way_message_to_voyager(message_shot)
+            self._comms_id += 1
+            self._image_id += 1
+        except Exception:
+            self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename}")
+
+        # TODO: uncomment out the actual routine when we go on sky
+        # make the image we took the reference image
+        #donuts_ref = Donuts(filename)
+
+        # loop over the 4 directions for the requested number of iterations
+        for _ in range(self.calibration_n_iterations):
+            for i in range(4):
+                # pulse guide in direction i
+                try:
+                    uuid_i = str(uuid.uuid4())
+                    message_pg = self._msg.pulse_guide(uuid_i, self._comms_id, i, self.calibration_step_size_ms)
+                    # send pulse guide command in direction i
+                    self.__send_two_way_message_to_voyager(message_pg)
+                    self._comms_id += 1
+                except Exception:
+                    # send a recentering error
+                    self.__send_donuts_message_to_voyager("DonutsRecenterError", f"Failed to PulseGuide {i} {self.calibration_step_size_ms}")
+                    traceback.print_exc()
+
+                # take an image
+                try:
+                    filename = self.__calibration_filename(i, self.calibration_step_size_ms)
+                    shot_uuid = str(uuid.uuid4())
+                    message_shot = self._msg.camera_shot(shot_uuid, self._comms_id, self.calibration_exptime, "true", filename)
+                    self.__send_two_way_message_to_voyager(message_shot)
+                    self._comms_id += 1
+                    self._image_id += 1
+                except Exception:
+                    self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename}")
+
+                # TODO: uncomment out the actual routine when we go on sky
+                # measure the offset and update the reference image
+                #shift = donuts_ref.measure_shift(filename)
+                #direction, magnitude = self.__determine_shift_direction_and_magnitude(shift)
+                #direction_store[i].append(direction)
+                #scale_store[i].append(magnitude)
+                #donuts_ref = Donuts(filename)
+
+        # TODO: uncomment out the actual routine when we go on sky
+        # now do some analysis on the run from above
+        # check that the directions are the same every time for each orientation
+        #for direc in direction_store:
+        #    logging.info(direction_store[direc])
+        #    assert len(set(direction_store[direc])) == 1
+        #    logging.info(f"{direc}: {direction_store[direc][0]}")
+        # now work out the ms/pix scales from the calbration run above
+        #for direc in scale_store:
+        #    ratio = self.calibration_step_size_ms/np.average(scale_store[direc])
+        #    logging.info(f"{direc}: {ratio:.2f} ms/pixel")
+
+    def __initialise_pid_loop(self):
+        """
+        (Re)initialise the PID loop
+        """
+        # initialise the PID loop with the coeffs from config
+        self._pid_x = PID(self.pid_x_p, self.pid_x_i, self.pid_x_d)
+        self._pid_y = PID(self.pid_y_p, self.pid_y_i, self.pid_y_d)
+        # set the PID set points (typically 0)
+        self._pid_x.setPoint(self.pid_x_setpoint)
+        self._pid_y.setPoint(self.pid_y_setpoint)
+
+    def __initialise_guide_buffer(self):
+        """
+        (Re) initialise the ag measurement buffer
+        """
+        self._buff_x = []
+        self._buff_y = []
+
+    def __process_guide_correction(self, shift):
+        """
+        """
+        # get x and y from shift object
+        x = shift.x.value
+        y = shift.y.value
+
+        # TODO: add logging
+        #logMessageToDb(args.instrument, "x shift: {:.2f}".format(float(shift_x)))
+        #logMessageToDb(args.instrument, "y shift: {:.2f}".format(float(shift_y)))
+
+        # get telescope declination to scale RA corrections
+        dec_rads = np.radians(self._declination)
+        cos_dec = np.cos(dec_rads)
+
+        # pop the earliest buffer value if > N measurements
+        while len(self._buff_x) > self.guide_buffer_length:
+            self._buff_x.pop(0)
+        while len(self._buff_y) > self.guide_buffer_length:
+            self._buff_y.pop(0)
+        assert len(self._buff_x) == len(self._buff_y)
+
+        # kill anything that is > sigma_buffer sigma buffer stats, but only after buffer is full
+        # otherwise, wait to get better stats
+        if len(self._buff_x) < self.guide_buffer_length and len(self._buff_y) < self.guide_buffer_length:
+            # TODO: add logging
+            # logMessageToDb(args.instrument, 'Filling AG stats buffer...')
+            logging.info("Filling AG stats buffer")
+            self._buff_x_sigma = 0.0
+            self._buff_y_sigma = 0.0
+        else:
+            self._buff_x_sigma = np.std(self._buff_x)
+            self._buff_y_sigma = np.std(self._buff_y)
+            if abs(x) > self.guide_buffer_sigma * self._buff_x_sigma or abs(y) > self.guide_buffer_sigma * self._buff_y_sigma:
+                # TODO: add logging
+                #logMessageToDb(args.instrument,
+                #               'Guide error > {} sigma * buffer errors, ignoring...'.format(SIGMA_BUFFER))
+                # store the original values in the buffer, even if correction
+                # was too big, this will allow small outliers to be caught
+                logging.warning(f"Guide correction(s) too large x:{x:2.f} y:{y:.2f}")
+                self._buff_x.append(x)
+                self._buff_y.append(y)
+
+                # send back empty correction
+                direction = {"x": self.guide_directions["+x"],
+                             "y": self.guide_directions["+y"]}
+                duration = {"x": 0, "y": 0}
+                return direction, duration
+
+        # update the PID controllers, run them in parallel
+        pidx = self._pid_x.update(x) * -1
+        pidy = self._pid_y.update(y) * -1
+
+        # check if we went over the max allowed shift, trim if so
+        if pidx >= self.max_error_pixels:
+            pidx = self.max_error_pixels
+        elif pidx <= -self.max_error_pixels:
+            pidx = -self.max_error_pixels
+        if pidy >= self.max_error_pixels:
+            pidy = self.max_error_pixels
+        elif pidy <= -self.max_error_pixels:
+            pidy = -self.max_error_pixels
+
+        # TODO: add logging
+        #logMessageToDb(args.instrument, "PID: {0:.2f}  {1:.2f}".format(float(pidx), float(pidy)))
+        logging.info(f"PID: x:{pidx:.2f} y:{pidy:.2f}")
+
+        # determine the directions and scaled shifr magnitudes (in ms) to send
+        # abs() on -ve duration otherwise throws back an error
+        if 0 < pidx <= self.max_error_pixels:
+            guide_time_x = pidx * self.pixels_to_time['+x']
+            if self.ra_axis == 'x':
+                guide_time_x = guide_time_x/cos_dec
+            guide_direction_x = self.guide_directions["+x"]
+        elif 0 > pidx >= -self.max_error_pixels:
+            guide_time_x = abs(pidx * self.pixels_to_time['-x'])
+            if self.ra_axis == 'x':
+                guide_time_x = guide_time_x/cos_dec
+            guide_direction_x = self.guide_directions["-x"]
+        else:
+            guide_time_x = 0
+            guide_direction_x = self.guide_directions["+x"]
+
+        if 0 < pidy <= self.max_error_pixels:
+            guide_time_y = pidy * self.pixels_to_time['+y']
+            if self.ra_axis == 'y':
+                guide_time_y = guide_time_y/cos_dec
+            guide_direction_y = self.guide_directions["+y"]
+        elif 0 > pidy >= -self.max_error_pixels:
+            guide_time_y = abs(pidy * self.pixels_to_time['-y'])
+            if self.ra_axis == 'y':
+                guide_time_y = guide_time_y/cos_dec
+            guide_direction_y = self.guide_directions["-y"]
+        else:
+            guide_time_y = 0
+            guide_direction_y = self.guide_directions["+y"]
+
+        # bake these final values into the direction/duration results
+        direction = {"x": guide_direction_x,
+                     "y": guide_direction_y}
+        duration = {"x": guide_time_x,
+                    "y": guide_time_y}
+
+        # TODO: add logging
+        #logMessageToDb(args.instrument, "Guide correction Applied")
+
+        # store the original values in the buffer
+        self._buff_x.append(x)
+        self._buff_y.append(y)
+
+        return direction, duration
+
+
 if __name__ == "__main__":
 
-    config = {'socket_ip': '127.0.0.1',
-              'socket_port': 5950,
-              'host': 'DESKTOP-CNTF3JR',
-              'calibration_root': 'C:\\Users\\user\\Documents\\Voyager\\DonutsCalibration',
-              'calibration_step_size_ms': 5000,
-              'calibration_n_iterations': 3,
-              'calibration_exptime': 10,
-              'image_extension': ".fit"}
+    config = {"socket_ip": "127.0.0.1",
+              "socket_port": 5950,
+              "host": "DESKTOP-CNTF3JR",
+              "calibration_root": "C:\\Users\\user\\Documents\\Voyager\\DonutsCalibration",
+              "logging_root": "C:\\Users\\user\\Documents\\Voyager\\DonutsLogs",
+              "calibration_step_size_ms": 5000,
+              "calibration_n_iterations": 3,
+              "calibration_exptime": 10,
+              "image_extension": ".fit",
+              "filter_keyword": "FILTER",
+              "field_keyword": "FIELD",
+              "ra_keyword": "RA",
+              "dec_keyword": "DEC",
+              "ra_axis": "y",
+              "pid_coeffs": {"x": {"p": 0.70, "i": 0.02, "d": 0.0},
+                             "y": {"p": 0.50, "i": 0.02, "d": 0.0},
+                             "set_x": 0.0,
+                             "set_y": 0.0},
+              "guide_buffer_length": 20,
+              "guide_buffer_sigma": 10,
+              "max_error_pixels": 20,
+              "pixels_to_time": {"+x": 69.24,
+                                 "-x": 69.57,
+                                 "+y": 69.27,
+                                 "-y": 69.31},
+              "guide_directions": {"-y": 0, "+y": 1, "-x": 2, "+x": 3},
+              }
+
+    # set up the log file
+    _, night = vutils.get_data_dir(config['logging_root'])
+    log_filename = f"{night}_donuts.log"
+    log_file_path = f"{config['logging_root']}\\{log_filename}"
+    logging.basicConfig(filename=log_file_path,
+                        level=logging.INFO,
+                        format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
 
     voyager = Voyager(config)
     voyager.run()
