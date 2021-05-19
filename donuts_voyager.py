@@ -10,7 +10,9 @@ import threading
 import queue
 import json
 import uuid
+from collections import defaultdict
 import numpy as np
+from donuts import Donuts
 import voyager_utils as vutils
 
 # TODO: Add logging
@@ -212,7 +214,29 @@ class Voyager():
         """
         Return a calibration filename
         """
-        return f"{self.calibration_dir}\\step_{self._image_id}_d{direction}_{pulse_time}ms{self.image_extension}"
+        return f"{self.calibration_dir}\\step_{self._image_id:06d}_d{direction}_{pulse_time}ms{self.image_extension}"
+
+    @staticmethod
+    def __determine_shift_direction_and_magnitude(shift):
+        """
+        Take a donuts shift object and work out
+        the direction of the shift and the distance
+        """
+        sx = shift.x.value
+        sy = shift.y.value
+        if abs(sx) > abs(sy):
+            if sx > 0:
+                direction = '-x'
+            else:
+                direction = '+x'
+            magnitude = abs(sx)
+        else:
+            if sy > 0:
+                direction = '-y'
+            else:
+                direction = '+y'
+            magnitude = abs(sy)
+        return direction, magnitude
 
     def __calibrate_donuts(self):
         """
@@ -220,18 +244,18 @@ class Voyager():
 
         Take in the message object so we can prepare commands
         """
+        # set up objects to hold calib info
+        direction_store = defaultdict(list)
+        scale_store = defaultdict(list)
+
         # set up calibration directory
         self.calibration_dir, _ = vutils.get_data_dir(self.calibration_root)
 
         # point the telescope to 1h west of the meridian
 
-        # make it the reference for Donuts
-
         # calculate the shift and store result
 
         # determine direction and ms/pix scaling
-
-
 
         # get the reference filename
         filename = self.__calibration_filename("R", 0)
@@ -245,7 +269,9 @@ class Voyager():
         except Exception:
             self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename}")
 
-        # TODO: Make this the reference image or do calibration externally
+        # TODO: uncomment out the actual routine when we go on sky
+        # make the image we took the reference image
+        #donuts_ref = Donuts(filename)
 
         # loop over the 4 directions for the requested number of iterations
         for _ in range(self.calibration_n_iterations):
@@ -257,7 +283,6 @@ class Voyager():
                     # send pulse guide command in direction i
                     self.__send_two_way_message_to_voyager(message_pg)
                     self._comms_id += 1
-                    self._image_id += 1
                 except Exception:
                     # send a recentering error
                     self.__send_donuts_message_to_voyager("DonutsRecenterError", f"Failed to PulseGuide {i} {self.calibration_step_size_ms}")
@@ -273,6 +298,26 @@ class Voyager():
                     self._image_id += 1
                 except Exception:
                     self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename}")
+
+                # TODO: uncomment out the actual routine when we go on sky
+                # measure the offset and update the reference image
+                #shift = donuts_ref.measure_shift(filename)
+                #direction, magnitude = self.__determine_shift_direction_and_magnitude(shift)
+                #direction_store[i].append(direction)
+                #scale_store[i].append(magnitude)
+                #donuts_ref = Donuts(filename)
+
+        # TODO: uncomment out the actual routine when we go on sky
+        # now do some analysis on the run from above
+        # check that the directions are the same every time for each orientation
+        #for direc in direction_store:
+        #    print(direction_store[direc])
+        #    assert len(set(direction_store[direc])) == 1
+        #    print(f"{direc}: {direction_store[direc][0]}")
+        # now work out the ms/pix scales from the calbration run above
+        #for direc in scale_store:
+        #    ratio = self.calibration_step_size_ms/np.average(scale_store[direc])
+        #    print(f"{direc}: {ratio:.2f} ms/pixel")
 
     def run(self):
         """
