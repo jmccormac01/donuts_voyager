@@ -530,6 +530,17 @@ class Voyager():
                 # ping the keep alive
                 self.__keep_socket_alive()
 
+    @staticmethod
+    def __dec_str_to_deg(declination):
+        """
+        Convert DD MM SS.ss into DD.dddd
+        """
+        d, m, s = declination.split(' ')
+        if d[0] == '-':
+            return int(d) - float(m)/60. - float(s)/3600.
+        else:
+            return int(d) + float(m)/60. + float(s)/3600.
+
     def __guide_loop(self):
         """
         Analyse incoming images for guiding offsets.
@@ -565,7 +576,8 @@ class Voyager():
                     # current field and filter?
                     current_filter = ff[0].header[self.filter_keyword]
                     current_field = ff[0].header[self.field_keyword]
-                    self._declination = ff[0].header[self.dec_keyword]
+                    declination = ff[0].header[self.dec_keyword]
+                    self._declination = self.__dec_str_to_deg(declination)
                 # pylint: enable=no-member
 
                 # if something changes or we haven't started yet, sort out a reference image
