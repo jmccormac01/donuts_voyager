@@ -1154,6 +1154,7 @@ class Voyager():
                 # measure the offset and update the reference image
                 shift = donuts_ref.measure_shift(filename)
                 direction, magnitude = self.__determine_shift_direction_and_magnitude(shift)
+                logging.info(f"SHIFT: {direction} {magnitude}")
                 direction_store[i].append(direction)
                 scale_store[i].append(magnitude)
                 donuts_ref = Donuts(filename)
@@ -1162,7 +1163,8 @@ class Voyager():
         # check that the directions are the same every time for each orientation
         for direc in direction_store:
             logging.info(direction_store[direc])
-            assert len(set(direction_store[direc])) == 1
+            if len(set(direction_store[direc])) == 1:
+                logging.error(f"ERROR: PROBLEM WITH CALIBRATED DIRECTION {direction_store[direc]}")
             logging.info(f"{direc}: {direction_store[direc][0]}")
         # now work out the ms/pix scales from the calbration run above
         for direc in scale_store:
@@ -1355,7 +1357,7 @@ if __name__ == "__main__":
               "logging_root": "C:\\Users\\itelescope\\Documents\\Voyager\\DonutsLogs",
               "calibration_step_size_ms": 5000,
               "calibration_n_iterations": 5,
-              "calibration_exptime": 10,
+              "calibration_exptime": 20,
               "image_extension": ".FIT",
               "filter_keyword": "FILTER",
               "field_keyword": "OBJECT",
