@@ -495,7 +495,9 @@ class Voyager():
                                     self.__send_donuts_message_to_voyager("DonutsRecenterError", f"Failed to PulseGuide {last_image}")
                                     traceback.print_exc()
                             else:
-                                logging.info(f"No guide correction returned for {last_image}, skipping...")
+                                logging.info(f"No guide correction returned for {last_image}, skipping and sending DonutsRecenterDone...")
+                                # send a DonutsRecenterDone message
+                                self.__send_donuts_message_to_voyager("DonutsRecenterDone")
 
                             # set the current mode back to IDLE
                             self._status = DonutsStatus.IDLE
