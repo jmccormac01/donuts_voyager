@@ -1167,7 +1167,7 @@ class Voyager():
         # check that the directions are the same every time for each orientation
         for direc in self._direction_store:
             logging.info(self._direction_store[direc])
-            if len(set(self._direction_store[direc])) == 1:
+            if len(set(self._direction_store[direc])) != 1:
                 logging.error(f"ERROR: PROBLEM WITH CALIBRATED DIRECTION {self._direction_store[direc]}")
             logging.info(f"{direc}: {self._direction_store[direc][0]}")
         # now work out the ms/pix scales from the calbration run above
