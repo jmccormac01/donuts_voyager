@@ -337,6 +337,10 @@ class Voyager():
         self.calibration_n_iterations = config['calibration_n_iterations']
         self.calibration_exptime = config['calibration_exptime']
 
+        # set up objects to hold calibration info
+        self._direction_store = None
+        self._scale_store = None
+
         # set up a temporary dict to hold reference images
         # this will be a datebase later
         # TODO: remove this later
@@ -1102,8 +1106,8 @@ class Voyager():
         None
         """
         # set up objects to hold calib info
-        direction_store = defaultdict(list)
-        scale_store = defaultdict(list)
+        self._direction_store = defaultdict(list)
+        self._scale_store = defaultdict(list)
 
         # set up calibration directory
         self._calibration_dir, _ = vutils.get_data_dir(self.calibration_root)
@@ -1155,20 +1159,20 @@ class Voyager():
                 shift = donuts_ref.measure_shift(filename)
                 direction, magnitude = self.__determine_shift_direction_and_magnitude(shift)
                 logging.info(f"SHIFT: {direction} {magnitude}")
-                direction_store[i].append(direction)
-                scale_store[i].append(magnitude)
+                self._direction_store[i].append(direction)
+                self._scale_store[i].append(magnitude)
                 donuts_ref = Donuts(filename)
 
         # now do some analysis on the run from above
         # check that the directions are the same every time for each orientation
-        for direc in direction_store:
-            logging.info(direction_store[direc])
-            if len(set(direction_store[direc])) == 1:
-                logging.error(f"ERROR: PROBLEM WITH CALIBRATED DIRECTION {direction_store[direc]}")
-            logging.info(f"{direc}: {direction_store[direc][0]}")
+        for direc in self._direction_store:
+            logging.info(self._direction_store[direc])
+            if len(set(self._direction_store[direc])) == 1:
+                logging.error(f"ERROR: PROBLEM WITH CALIBRATED DIRECTION {self._direction_store[direc]}")
+            logging.info(f"{direc}: {self._direction_store[direc][0]}")
         # now work out the ms/pix scales from the calbration run above
-        for direc in scale_store:
-            ratio = self.calibration_step_size_ms/np.average(scale_store[direc])
+        for direc in self._scale_store:
+            ratio = self.calibration_step_size_ms/np.average(self._scale_store[direc])
             logging.info(f"{direc}: {ratio:.2f} ms/pixel")
 
     def __initialise_pid_loop(self):
