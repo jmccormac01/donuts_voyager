@@ -1102,9 +1102,8 @@ class Voyager():
         None
         """
         # set up objects to hold calib info
-        # TODO: uncomment out the actual routine when we go on sky
-        #direction_store = defaultdict(list)
-        #scale_store = defaultdict(list)
+        direction_store = defaultdict(list)
+        scale_store = defaultdict(list)
 
         # set up calibration directory
         self._calibration_dir, _ = vutils.get_data_dir(self.calibration_root)
@@ -1123,9 +1122,8 @@ class Voyager():
         except Exception:
             self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename}")
 
-        # TODO: uncomment out the actual routine when we go on sky
         # make the image we took the reference image
-        #donuts_ref = Donuts(filename)
+        donuts_ref = Donuts(filename)
 
         # loop over the 4 directions for the requested number of iterations
         for _ in range(self.calibration_n_iterations):
@@ -1153,25 +1151,23 @@ class Voyager():
                 except Exception:
                     self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename}")
 
-                # TODO: uncomment out the actual routine when we go on sky
                 # measure the offset and update the reference image
-                #shift = donuts_ref.measure_shift(filename)
-                #direction, magnitude = self.__determine_shift_direction_and_magnitude(shift)
-                #direction_store[i].append(direction)
-                #scale_store[i].append(magnitude)
-                #donuts_ref = Donuts(filename)
+                shift = donuts_ref.measure_shift(filename)
+                direction, magnitude = self.__determine_shift_direction_and_magnitude(shift)
+                direction_store[i].append(direction)
+                scale_store[i].append(magnitude)
+                donuts_ref = Donuts(filename)
 
-        # TODO: uncomment out the actual routine when we go on sky
         # now do some analysis on the run from above
         # check that the directions are the same every time for each orientation
-        #for direc in direction_store:
-        #    logging.info(direction_store[direc])
-        #    assert len(set(direction_store[direc])) == 1
-        #    logging.info(f"{direc}: {direction_store[direc][0]}")
+        for direc in direction_store:
+            logging.info(direction_store[direc])
+            assert len(set(direction_store[direc])) == 1
+            logging.info(f"{direc}: {direction_store[direc][0]}")
         # now work out the ms/pix scales from the calbration run above
-        #for direc in scale_store:
-        #    ratio = self.calibration_step_size_ms/np.average(scale_store[direc])
-        #    logging.info(f"{direc}: {ratio:.2f} ms/pixel")
+        for direc in scale_store:
+            ratio = self.calibration_step_size_ms/np.average(scale_store[direc])
+            logging.info(f"{direc}: {ratio:.2f} ms/pixel")
 
     def __initialise_pid_loop(self):
         """
@@ -1354,18 +1350,18 @@ if __name__ == "__main__":
 
     config = {"socket_ip": "127.0.0.1",
               "socket_port": 5950,
-              "host": "DESKTOP-CNTF3JR",
-              "calibration_root": "C:\\Users\\user\\Documents\\Voyager\\DonutsCalibration",
-              "logging_root": "C:\\Users\\user\\Documents\\Voyager\\DonutsLogs",
+              "host": "Gavin-Telescope",
+              "calibration_root": "C:\\Users\\itelescope\\Documents\\Voyager\\DonutsCalibration",
+              "logging_root": "C:\\Users\\itelescope\\Documents\\Voyager\\DonutsLogs",
               "calibration_step_size_ms": 5000,
-              "calibration_n_iterations": 3,
+              "calibration_n_iterations": 5,
               "calibration_exptime": 10,
               "image_extension": ".fit",
               "filter_keyword": "FILTER",
-              "field_keyword": "FIELD",
-              "ra_keyword": "RA",
-              "dec_keyword": "DEC",
-              "ra_axis": "y",
+              "field_keyword": "OBJECT",
+              "ra_keyword": "OBJCTRA",
+              "dec_keyword": "OBJCTDEC",
+              "ra_axis": "x",
               "pid_coeffs": {"x": {"p": 0.70, "i": 0.02, "d": 0.0},
                              "y": {"p": 0.70, "i": 0.02, "d": 0.0},
                              "set_x": 0.0,
