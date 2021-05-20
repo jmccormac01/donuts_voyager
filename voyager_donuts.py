@@ -1382,9 +1382,11 @@ if __name__ == "__main__":
         os.mkdir(config['logging_root'])
     log_filename = f"{night}_donuts.log"
     log_file_path = f"{config['logging_root']}\\{log_filename}"
-    logging.basicConfig(filename=log_file_path,
-                        level=logging.INFO,
-                        format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
+    #logging.basicConfig(filename=log_file_path,
+    #                    level=logging.INFO,
+    #                    format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
+    # TODO: fix this later, logging to stddout for ease now
+    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
     voyager = Voyager(config)
     voyager.run()
