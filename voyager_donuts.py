@@ -1188,6 +1188,11 @@ class Voyager():
         for direc in self._scale_store:
             ratio = self.calibration_step_size_ms/np.average(self._scale_store[direc])
             logging.info(f"{direc}: {ratio:.2f} ms/pixel")
+        
+        # print out the storage areas for reference in case some bad measurements were made
+        for direc in self._direction_store:
+            logging.info(f"Direction store: {direc} {self._direction_store[direc]}")
+            logging.info(f"Scale store: {direc} {self._scale_store[direc]}")
 
     def __initialise_pid_loop(self):
         """
