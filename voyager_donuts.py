@@ -1378,6 +1378,8 @@ if __name__ == "__main__":
 
     # set up the log file
     _, night = vutils.get_data_dir(config['logging_root'])
+    if not os.path.exists(config['logging_root']):
+        os.mkdir(config['logging_root'])
     log_filename = f"{night}_donuts.log"
     log_file_path = f"{config['logging_root']}\\{log_filename}"
     logging.basicConfig(filename=log_file_path,
