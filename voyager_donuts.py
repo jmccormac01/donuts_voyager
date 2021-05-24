@@ -23,6 +23,7 @@ from PID import PID
 # TODO: Add RemoteActionAbort call when things go horribly wrong
 # TODO: Determine how to trigger/abort donuts script from drag_script
 # TODO: Set initial pull in phase again, reset PID after settled
+# TODO: Add flat rejections of corrections > certain value (e.g. 40 pixels)
 # this has been ignored for now while testing
 
 # pylint: disable=line-too-long
@@ -1314,7 +1315,7 @@ class Voyager():
                 #               'Guide error > {} sigma * buffer errors, ignoring...'.format(SIGMA_BUFFER))
                 # store the original values in the buffer, even if correction
                 # was too big, this will allow small outliers to be caught
-                logging.warning(f"Guide correction(s) too large x:{x:2.f} y:{y:.2f}")
+                logging.warning(f"Guide correction(s) too large x:{x:.2f} y:{y:.2f}")
                 self._buff_x.append(x)
                 self._buff_y.append(y)
 
