@@ -11,6 +11,7 @@ import logging
 import queue
 import json
 import uuid
+import argparse as ap
 from collections import defaultdict
 import numpy as np
 from astropy.io import fits
@@ -21,6 +22,7 @@ from PID import PID
 # TODO: Add logging to database
 # TODO: Add RemoteActionAbort call when things go horribly wrong
 # TODO: Determine how to trigger/abort donuts script from drag_script
+# TODO: Set initial pull in phase again, reset PID after settled
 # this has been ignored for now while testing
 
 # pylint: disable=line-too-long
@@ -34,6 +36,21 @@ from PID import PID
 # pylint: disable=too-many-lines
 # pylint: disable=too-many-instance-attributes
 # pylint: disable=broad-except
+
+def arg_parse():
+    """
+    Parse the command line arguments
+    """
+    p = ap.ArgumentParser()
+    p.add_argument('--logging_level',
+                   type=str,
+                   choices=['info', 'debug'],
+                   default='info')
+    p.add_argument('--logging_location',
+                   type=str,
+                   choices=['stdout', 'file'],
+                   default='stdout')
+    return p.parse_args()
 
 class DonutsStatus():
     """
@@ -430,7 +447,7 @@ class Voyager():
 
                     # do nothing for events that just give us some info
                     if rec['Event'] in self._INFO_SIGNALS:
-                        logging.info(f"RECEIVED: {rec}")
+                        logging.debug(f"RECEIVED: {rec}")
 
                     # handle the autoguider calibration event
                     elif rec['Event'] == "DonutsCalibrationRequired":
@@ -447,7 +464,7 @@ class Voyager():
 
                     # handle the autoguiding event
                     elif rec['Event'] == "DonutsRecenterRequired":
-                        logging.info(f"RECEIVED: {rec}")
+                        logging.debug(f"RECEIVED: {rec}")
                         # if guider is IDLE, do stuff, otherwise do nothing
                         if self._status == DonutsStatus.IDLE:
                             # set the current mode to guiding
@@ -706,7 +723,7 @@ class Voyager():
                 sent = True
                 # update the last poll time
                 self._last_poll_time = time.time()
-                logging.info(f"SENT: {message.rstrip()}")
+                logging.debug(f"SENT: {message.rstrip()}")
             except:
                 logging.error(f"CANNOT SEND {message} TO VOYAGER [{n_attempts}]")
                 traceback.print_exc()
@@ -953,7 +970,7 @@ class Voyager():
                     # send the command
                     sent = self.__send(msg_str)
                     if sent:
-                        logging.info(f"CALLBACK ADD: {uid}:{idd}")
+                        logging.debug(f"CALLBACK ADD: {uid}:{idd}")
 
 
                 logging.debug(f"JSONRPC CALLBACK LOOP [{cb_loop_count+1}]: {uid}:{idd}")
@@ -961,7 +978,7 @@ class Voyager():
 
                 # handle the jsonrpc response (1 of 2 responses needed)
                 if "jsonrpc" in rec.keys():
-                    logging.info(f"RECEIVED: {rec}")
+                    logging.debug(f"RECEIVED: {rec}")
                     rec_idd, result, err_code, err_msg = self.__parse_jsonrpc(rec)
 
                     # we only care bout IDs for the commands we just sent right now
@@ -975,7 +992,7 @@ class Voyager():
                             self.__send_abort_message_to_voyager(uid, idd)
                             raise Exception(f"ERROR: Could not send message {msg_str}")
                         else:
-                            logging.info(f"Command id: {idd} returned correctly")
+                            logging.debug(f"Command id: {idd} returned correctly")
                             # add the response if things go well. if things go badly we're quitting anyway
                             response.idd_received(result)
                     else:
@@ -994,7 +1011,7 @@ class Voyager():
             if "Event" in rec.keys():
 
                 if rec['Event'] == "RemoteActionResult":
-                    logging.info(f"RECEIVED: {rec}")
+                    logging.debug(f"RECEIVED: {rec}")
                     rec_uid, result, *_ = self.__parse_remote_action_result(rec)
 
                     # check we have a response for the thing we want
@@ -1005,14 +1022,14 @@ class Voyager():
                             logging.error(f"{rec}")
                             # TODO: Consider adding a RemoteActionAbort here if shit hits the fan
                         else:
-                            logging.info(f"Command uid: {uid} returned correctly")
+                            logging.debug(f"Command uid: {uid} returned correctly")
                             # add the response, regardless if it's good or bad, so we can end this loop
                             response.uid_received(result)
                     else:
                         logging.warning(f"Waiting for uid: {uid}, ignoring response for uid: {rec_uid}")
 
                 elif rec['Event'] in self._INFO_SIGNALS:
-                    logging.info(f"RECEIVED: {rec}")
+                    logging.debug(f"RECEIVED: {rec}")
 
                 else:
                     logging.warning(f"Unknown response {rec}")
@@ -1188,7 +1205,7 @@ class Voyager():
         for direc in self._scale_store:
             ratio = self.calibration_step_size_ms/np.average(self._scale_store[direc])
             logging.info(f"{direc}: {ratio:.2f} ms/pixel")
-        
+
         # print out the storage areas for reference in case some bad measurements were made
         for direc in self._direction_store:
             logging.info(f"Direction store: {direc} {self._direction_store[direc]}")
@@ -1373,6 +1390,28 @@ class Voyager():
 
 if __name__ == "__main__":
 
+    # grab the command line arguments
+    args = arg_parse()
+
+    # get the logging level:
+    if args.logging_level == 'debug':
+        level = logging.DEBUG
+    else:
+        level = logging.INFO
+
+    # get log location
+    if args.logging_location == 'stdout':
+        logging.basicConfig(stream=sys.stdout, level=level)
+    else:
+        _, night = vutils.get_data_dir(config['logging_root'])
+        if not os.path.exists(config['logging_root']):
+            os.mkdir(config['logging_root'])
+        log_filename = f"{night}_donuts.log"
+        log_file_path = f"{config['logging_root']}\\{log_filename}"
+        logging.basicConfig(filename=log_file_path,
+                            level=level,
+                            format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
+
     config = {"socket_ip": "127.0.0.1",
               "socket_port": 5950,
               "host": "Gavin-Telescope",
@@ -1400,18 +1439,6 @@ if __name__ == "__main__":
                                  "-y": 62.09},
               "guide_directions": {"+y": 2, "-y": 3, "+x": 1, "-x": 0},
               }
-
-    # set up the log file
-    _, night = vutils.get_data_dir(config['logging_root'])
-    if not os.path.exists(config['logging_root']):
-        os.mkdir(config['logging_root'])
-    log_filename = f"{night}_donuts.log"
-    log_file_path = f"{config['logging_root']}\\{log_filename}"
-    #logging.basicConfig(filename=log_file_path,
-    #                    level=logging.INFO,
-    #                    format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
-    # TODO: fix this later, logging to stddout for ease now
-    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
     voyager = Voyager(config)
     voyager.run()
