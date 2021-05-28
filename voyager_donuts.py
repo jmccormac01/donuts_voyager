@@ -23,7 +23,6 @@ from PID import PID
 # TODO: Add RemoteActionAbort call when things go horribly wrong
 # TODO: Determine how to trigger/abort donuts script from drag_script
 # TODO: Set initial pull in phase again, reset PID after settled
-# TODO: Add flat rejections of corrections > certain value (e.g. 40 pixels)
 # this has been ignored for now while testing
 
 # pylint: disable=line-too-long
@@ -394,13 +393,22 @@ class Voyager():
         # set up max error in pixels
         self.max_error_pixels = config['max_error_pixels']
 
+        # set up stabilisation
+        self._stabilised = False
+        # set up how many attempts to stabilise are allowed
+        self.n_images_to_stabilise = config['n_images_to_stabilise']
+        # initialise stabilisation counter
+        self._images_to_stabilise = self.n_images_to_stabilise
+
         # calibrated pixels to time ratios and the directions
         self.pixels_to_time = config['pixels_to_time']
         self.guide_directions = config['guide_directions']
 
         # initialise all the things
         self.__initialise_guide_buffer()
-        self.__initialise_pid_loop()
+
+        # start with the guider unstabilised
+        self.__initialise_pid_loop(stabilised=False)
 
     def run(self):
         """
@@ -600,9 +608,12 @@ class Voyager():
 
                 # if something changes or we haven't started yet, sort out a reference image
                 if current_field != self._last_field or current_filter != self._last_filter or self._donuts_ref is None:
-                    # reset PID loop and guide buffer
-                    self.__initialise_pid_loop()
+                    # reset PID loop to unstabilised state
+                    self.__initialise_pid_loop(stabilised=False)
+                    # reset the guide buffer
                     self.__initialise_guide_buffer()
+                    # reset stabilised flag
+                    self._stabilised = False
 
                     # Look for a reference image for this field/filter
                     # TODO: add db backend here, see acp_ag.py for layout
@@ -1212,14 +1223,15 @@ class Voyager():
             logging.info(f"Direction store: {direc} {self._direction_store[direc]}")
             logging.info(f"Scale store: {direc} {self._scale_store[direc]}")
 
-    def __initialise_pid_loop(self):
+    def __initialise_pid_loop(self, stabilised):
         """
         (Re)initialise the PID loop objects
         for the X and Y directions
 
         Parameters
         ----------
-        None
+        stabilised : boolean
+            Are we stabilised or not?
 
         Returns
         -------
@@ -1229,9 +1241,15 @@ class Voyager():
         ------
         None
         """
-        # initialise the PID loop with the coeffs from config
-        self._pid_x = PID(self.pid_x_p, self.pid_x_i, self.pid_x_d)
-        self._pid_y = PID(self.pid_y_p, self.pid_y_i, self.pid_y_d)
+        if stabilised:
+            # initialise the PID loop with the coeffs from config
+            self._pid_x = PID(self.pid_x_p, self.pid_x_i, self.pid_x_d)
+            self._pid_y = PID(self.pid_y_p, self.pid_y_i, self.pid_y_d)
+        else:
+            # force 100% proportional during stabilisation
+            self._pid_x = PID(1.0, 0.0, 0.0)
+            self._pid_y = PID(1.0, 0.0, 0.0)
+
         # set the PID set points (typically 0)
         self._pid_x.setPoint(self.pid_x_setpoint)
         self._pid_y.setPoint(self.pid_y_setpoint)
@@ -1256,6 +1274,133 @@ class Voyager():
         """
         self._buff_x = []
         self._buff_y = []
+
+    def __get_null_correction(self):
+        """
+        Return an empty correction
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        direction : dict
+            Direction object for correction
+        duration : dict
+            Duration object for correction
+
+        Raises
+        ------
+        None
+        """
+        direction = {"x": self.guide_directions["+x"],
+                     "y": self.guide_directions["+y"]}
+        duration = {"x": 0, "y": 0}
+        return direction, duration
+
+    def __truncate_correction(self, x, y):
+        """
+        Apply a pass filter on the corrections
+        if needed.
+
+        Parameters
+        ----------
+        x : float
+            X correction
+        y : float
+            Y correction
+
+        Returns
+        -------
+        xt : float
+            Filtered x correction (if needed)
+        yt : float
+            Filtered y correction (if needed)
+
+        Raises
+        ------
+        None
+        """
+        # filter x
+        if x >= self.max_error_pixels:
+            xt = self.max_error_pixels
+        elif x <= -self.max_error_pixels:
+            xt = -self.max_error_pixels
+        else:
+            xt = x
+
+        # filter y
+        if y >= self.max_error_pixels:
+            yt = self.max_error_pixels
+        elif y <= -self.max_error_pixels:
+            yt = -self.max_error_pixels
+        else:
+            yt = y
+        return xt, yt
+
+    def __determine_direction_and_duration(self, x, y, cos_dec):
+        """
+        Take the correction in X and Y in pixels
+        and convert it to a direction and duration object
+        for pulse guide
+
+        Parameters
+        ----------
+        x : float
+            X correction
+        y : float
+            Y correction
+
+        Returns
+        -------
+        direction : dict
+            direction object for correction
+        duration : dict
+            duration object for correction
+
+        Raises
+        ------
+        None
+        """
+
+        # determine the directions and scaled shifr magnitudes (in ms) to send
+        # abs() on -ve duration otherwise throws back an error
+        if 0 < x <= self.max_error_pixels:
+            guide_time_x = x * self.pixels_to_time['+x']
+            if self.ra_axis == 'x':
+                guide_time_x = guide_time_x/cos_dec
+            guide_direction_x = self.guide_directions["+x"]
+        elif 0 > x >= -self.max_error_pixels:
+            guide_time_x = abs(x * self.pixels_to_time['-x'])
+            if self.ra_axis == 'x':
+                guide_time_x = guide_time_x/cos_dec
+            guide_direction_x = self.guide_directions["-x"]
+        else:
+            guide_time_x = 0
+            guide_direction_x = self.guide_directions["+x"]
+
+        if 0 < y <= self.max_error_pixels:
+            guide_time_y = y * self.pixels_to_time['+y']
+            if self.ra_axis == 'y':
+                guide_time_y = guide_time_y/cos_dec
+            guide_direction_y = self.guide_directions["+y"]
+        elif 0 > y >= -self.max_error_pixels:
+            guide_time_y = abs(y * self.pixels_to_time['-y'])
+            if self.ra_axis == 'y':
+                guide_time_y = guide_time_y/cos_dec
+            guide_direction_y = self.guide_directions["-y"]
+        else:
+            guide_time_y = 0
+            guide_direction_y = self.guide_directions["+y"]
+
+        # bake these final values into the direction/duration results
+        direction = {"x": guide_direction_x,
+                     "y": guide_direction_y}
+        duration = {"x": guide_time_x,
+                    "y": guide_time_y}
+
+        return direction, duration
 
     def __process_guide_correction(self, shift):
         """
@@ -1283,6 +1428,47 @@ class Voyager():
         x = shift.x.value
         y = shift.y.value
 
+        # TODO: go through this with first few images in mind
+
+        # handle big shifts during stabilisation and when stabilised
+        if (abs(x) > self.max_error_pixels or abs(y) > self.max_error_pixels) and self._stabilised:
+            logging.warning(f"Offset larger than max allowed shift {self.max_error_pixels}: x: {x} y:{y}")
+            logging.warning("Skipping this correction...")
+            direction, duration = self.__get_null_correction()
+            return direction, duration
+        # if we're stabilising, limit big shifts to the max value during this phase
+        elif (abs(x) > self.max_error_pixels or abs(y) > self.max_error_pixels) and not self._stabilised:
+            # if x is too big, limit it
+            x, y = self.__truncate_correction(x, y)
+        else:
+            pass
+
+        # handle stabilisation
+        if not self._stabilised and x < 2 and y < 2:
+            # set flag
+            self._stabilised = True
+            # reset the number of images to stabilise for next time
+            self._images_to_stabilise = self.n_images_to_stabilise
+            # log a message
+            logging.info("Stabilisation complete, reseting PID loop")
+            # reset the pid loop
+            self.__initialise_pid_loop(stabilised=True)
+            # reset the guide buffer
+            self.__initialise_guide_buffer()
+        # continue trying to stabilise
+        elif not self._stabilised and (x > 2 or y > 2) and self._images_to_stabilise >= 0:
+            # keep forcing 100% proportional correction
+            self.__initialise_pid_loop(stabilised=False)
+            self._images_to_stabilise -= 1
+        # check if we've been trying to stabilise for too long
+        elif not self._stabilised and (x > 2 or y > 2) and self._images_to_stabilise < 0:
+            logging.error(f"We've been trying to stabilise >{self.n_images_to_stabilise} images")
+            logging.error("There appears to be an error, quiting donuts")
+            self.__send_donuts_message_to_voyager("DonutsRecenterError", "Failed to stabilise guiding")
+            sys.exit(1)
+        else:
+            pass
+
         # TODO: add logging
         #logMessageToDb(args.instrument, "x shift: {:.2f}".format(float(shift_x)))
         #logMessageToDb(args.instrument, "y shift: {:.2f}".format(float(shift_y)))
@@ -1291,6 +1477,7 @@ class Voyager():
         dec_rads = np.radians(self._declination)
         cos_dec = np.cos(dec_rads)
 
+        # handle comparisons to the guide buffer
         # pop the earliest buffer value if > N measurements
         while len(self._buff_x) > self.guide_buffer_length:
             self._buff_x.pop(0)
@@ -1320,64 +1507,24 @@ class Voyager():
                 self._buff_y.append(y)
 
                 # send back empty correction
-                direction = {"x": self.guide_directions["+x"],
-                             "y": self.guide_directions["+y"]}
-                duration = {"x": 0, "y": 0}
+                direction, duration = self.__get_null_correction()
                 return direction, duration
 
+        # pass corrections through the PID controller
         # update the PID controllers, run them in parallel
         pidx = self._pid_x.update(x) * -1
         pidy = self._pid_y.update(y) * -1
 
-        # check if we went over the max allowed shift, trim if so
-        if pidx >= self.max_error_pixels:
-            pidx = self.max_error_pixels
-        elif pidx <= -self.max_error_pixels:
-            pidx = -self.max_error_pixels
-        if pidy >= self.max_error_pixels:
-            pidy = self.max_error_pixels
-        elif pidy <= -self.max_error_pixels:
-            pidy = -self.max_error_pixels
+        # check if we went over the max allowed shift
+        # trim if so, do nothing otherwise
+        pidx, pidy = self.__truncate_correction(pidx, pidy)
 
         # TODO: add logging
         #logMessageToDb(args.instrument, "PID: {0:.2f}  {1:.2f}".format(float(pidx), float(pidy)))
         logging.info(f"PID: x:{pidx:.2f} y:{pidy:.2f}")
 
-        # determine the directions and scaled shifr magnitudes (in ms) to send
-        # abs() on -ve duration otherwise throws back an error
-        if 0 < pidx <= self.max_error_pixels:
-            guide_time_x = pidx * self.pixels_to_time['+x']
-            if self.ra_axis == 'x':
-                guide_time_x = guide_time_x/cos_dec
-            guide_direction_x = self.guide_directions["+x"]
-        elif 0 > pidx >= -self.max_error_pixels:
-            guide_time_x = abs(pidx * self.pixels_to_time['-x'])
-            if self.ra_axis == 'x':
-                guide_time_x = guide_time_x/cos_dec
-            guide_direction_x = self.guide_directions["-x"]
-        else:
-            guide_time_x = 0
-            guide_direction_x = self.guide_directions["+x"]
-
-        if 0 < pidy <= self.max_error_pixels:
-            guide_time_y = pidy * self.pixels_to_time['+y']
-            if self.ra_axis == 'y':
-                guide_time_y = guide_time_y/cos_dec
-            guide_direction_y = self.guide_directions["+y"]
-        elif 0 > pidy >= -self.max_error_pixels:
-            guide_time_y = abs(pidy * self.pixels_to_time['-y'])
-            if self.ra_axis == 'y':
-                guide_time_y = guide_time_y/cos_dec
-            guide_direction_y = self.guide_directions["-y"]
-        else:
-            guide_time_y = 0
-            guide_direction_y = self.guide_directions["+y"]
-
-        # bake these final values into the direction/duration results
-        direction = {"x": guide_direction_x,
-                     "y": guide_direction_y}
-        duration = {"x": guide_time_x,
-                    "y": guide_time_y}
+        # convert correction into direction/duration objects
+        direction, duration = self.__determine_direction_and_duration(pidx, pidy, cos_dec)
 
         # TODO: add logging
         #logMessageToDb(args.instrument, "Guide correction Applied")
@@ -1434,6 +1581,7 @@ if __name__ == "__main__":
               "guide_buffer_length": 20,
               "guide_buffer_sigma": 10,
               "max_error_pixels": 20,
+              "n_images_to_stabilise": 10,
               "pixels_to_time": {"+x": 62.54,
                                  "-x": 62.13,
                                  "+y": 61.95,
