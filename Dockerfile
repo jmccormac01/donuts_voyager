@@ -20,8 +20,8 @@ RUN useradd -m -r donuts && \
     chown donuts /donuts
 
 # make a place to mount an external volume
-CMD mkdir /voyager_calib && \
-    chown donuts /voyager_
+#CMD mkdir /voyager_calib && \
+#    chown donuts /voyager_
 
 # install requirements first to help with caching
 COPY requirements.txt ./
