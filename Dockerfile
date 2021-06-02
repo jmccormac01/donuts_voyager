@@ -19,11 +19,8 @@ WORKDIR /donuts
 RUN useradd -m -r donuts && \
     chown donuts /donuts
 
-# make a place to mount an external volume
-#CMD mkdir /voyager_calib && \
-#    chown donuts /voyager_
-
 VOLUME /c/Users/user/Documents/Voyager/DonutsCalibration:/voyager_calib
+CMD chown donuts /voyager_calib
 
 # install requirements first to help with caching
 COPY requirements.txt ./
