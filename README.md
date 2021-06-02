@@ -4,6 +4,10 @@ Initial scribbles to have an event driven version of donuts
 
 # Installation
 
+To simplify the installation process of Donuts and MySQL, everything is containerised using Docker.
+Docker depends on the Windows Subsystem for Linux (WSL2.0) and this is only available on Windows 10.
+
+   1. Install/enable WSL2.0 - Add link to notes
    1. Install Docker desktop on your control PC
    1. Install Github desktop on youe control PC
    1. Clone the Donuts/Voyager git repository

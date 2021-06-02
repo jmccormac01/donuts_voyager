@@ -13,7 +13,7 @@ services:
     ports:
       - "6033:3306"
     volumes:
-      - /Users/jmcc/Dropbox/Docker/mysql:/var/lib/mysql
+      - /d/Dropbox/Docker/mysql:/var/lib/mysql
       - ./mysql-init.sql:/docker-entrypoint-initdb.d/mysql-init.sql
   voyager_donuts:
     container_name: voyager_donuts
