@@ -19,9 +19,6 @@ WORKDIR /donuts
 RUN useradd -m -r donuts && \
     chown donuts /donuts
 
-VOLUME /c/Users/user/Documents/Voyager/DonutsCalibration:/voyager_calib
-CMD chown donuts /voyager_calib
-
 # install requirements first to help with caching
 COPY requirements.txt ./
 RUN pip install -r requirements.txt
