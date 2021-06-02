@@ -10,23 +10,28 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root
       MYSQL_DATABASE: donuts
-    ports:
-      - "6033:3306"
+    #ports:
+      #- "6033:3306"
     volumes:
       - /d/Dropbox/Docker/mysql:/var/lib/mysql
       - ./mysql-init.sql:/docker-entrypoint-initdb.d/mysql-init.sql
+    network_mode: "host"
+
   voyager_donuts:
     container_name: voyager_donuts
     build:
       context: .
       dockerfile: Dockerfile
     image: voyager_donuts
-    ports:
-      - "5950:5950"
+    network_mode: "host"
+    #ports:
+    #  - "5950:5950"
+
   admin:
     image: adminer
-    ports:
-      - "8080:8080"
+    network_mode: "host"
+    #ports:
+    #  - "8080:8080"
 
 secrets:
   mysql_root:

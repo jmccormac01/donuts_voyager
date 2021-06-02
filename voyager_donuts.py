@@ -1560,11 +1560,13 @@ if __name__ == "__main__":
                             level=level,
                             format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
 
-    config = {"socket_ip": "127.0.0.1",
+    user = "user"
+    # user = 'itelescope'
+    config = {"socket_ip": "0.0.0.0",
               "socket_port": 5950,
               "host": "Gavin-Telescope",
-              "calibration_root": "C:\\Users\\itelescope\\Documents\\Voyager\\DonutsCalibration",
-              "logging_root": "C:\\Users\\itelescope\\Documents\\Voyager\\DonutsLogs",
+              "calibration_root": f"C:\\Users\\{user}\\Documents\\Voyager\\DonutsCalibration",
+              "logging_root": f"C:\\Users\\{user}\\Documents\\Voyager\\DonutsLogs",
               "calibration_step_size_ms": 5000,
               "calibration_n_iterations": 5,
               "calibration_exptime": 20,
