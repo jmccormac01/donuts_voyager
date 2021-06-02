@@ -13,11 +13,11 @@ RUN pip install -U \
     wheel
 
 # set a working directory
-WORKDIR /donuts
+WORKDIR /voyager
 
 # make a new user
 RUN useradd -m -r donuts && \
-    chown donuts /donuts
+    chown donuts /voyager
 
 # install requirements first to help with caching
 COPY requirements.txt ./

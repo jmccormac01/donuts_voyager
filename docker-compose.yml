@@ -14,6 +14,7 @@ services:
       #- "6033:3306"
     volumes:
       - /d/Dropbox/Docker/mysql:/var/lib/mysql
+      - /c/Users/user/Documents/Voyager:/voyager
       - ./mysql-init.sql:/docker-entrypoint-initdb.d/mysql-init.sql
     network_mode: "host"
 
@@ -24,6 +25,8 @@ services:
       dockerfile: Dockerfile
     image: voyager_donuts
     network_mode: "host"
+    volumes:
+      - /c/Users/user/Documents/Voyager:/voyager
     #ports:
     #  - "5950:5950"
 

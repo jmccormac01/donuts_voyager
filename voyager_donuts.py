@@ -1087,7 +1087,7 @@ class Voyager():
         ------
         None
         """
-        return f"{self._calibration_dir}\\step_{self._image_id:06d}_d{direction}_{pulse_time}ms{self.image_extension}"
+        return f"{self._calibration_dir}/step_{self._image_id:06d}_d{direction}_{pulse_time}ms{self.image_extension}"
 
     @staticmethod
     def __determine_shift_direction_and_magnitude(shift):
@@ -1555,18 +1555,20 @@ if __name__ == "__main__":
         if not os.path.exists(config['logging_root']):
             os.mkdir(config['logging_root'])
         log_filename = f"{night}_donuts.log"
-        log_file_path = f"{config['logging_root']}\\{log_filename}"
+        log_file_path = f"{config['logging_root']}/{log_filename}"
         logging.basicConfig(filename=log_file_path,
                             level=level,
                             format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
+
+    # TODO share the data directory with the container
 
     user = "user"
     # user = 'itelescope'
     config = {"socket_ip": "host.docker.internal",
               "socket_port": 5950,
               "host": "Gavin-Telescope",
-              "calibration_root": f"C:\\Users\\{user}\\Documents\\Voyager\\DonutsCalibration",
-              "logging_root": f"C:\\Users\\{user}\\Documents\\Voyager\\DonutsLogs",
+              "calibration_root": "/voyager/DonutsCalibration",
+              "logging_root": "/voyager/DonutsLogs",
               "calibration_step_size_ms": 5000,
               "calibration_n_iterations": 5,
               "calibration_exptime": 20,
