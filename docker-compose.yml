@@ -25,7 +25,7 @@ services:
     image: voyager_donuts
     network_mode: "host"
     volumes:
-      - /c/Users/user/Documents/Voyager/DonutsCalibration:/voyager_calib
+      - /user/Documents/Voyager/DonutsCalibration:/voyager_calib
     #ports:
     #  - "5950:5950"
 
