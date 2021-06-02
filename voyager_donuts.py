@@ -1567,7 +1567,7 @@ if __name__ == "__main__":
     config = {"socket_ip": "host.docker.internal",
               "socket_port": 5950,
               "host": "Gavin-Telescope",
-              "calibration_root": "/voyager/DonutsCalibration",
+              "calibration_root": "/voyager_calib",
               "logging_root": "/voyager/DonutsLogs",
               "calibration_step_size_ms": 5000,
               "calibration_n_iterations": 5,

@@ -13,11 +13,15 @@ RUN pip install -U \
     wheel
 
 # set a working directory
-WORKDIR /voyager
+WORKDIR /donuts
 
 # make a new user
 RUN useradd -m -r donuts && \
-    chown donuts /voyager
+    chown donuts /donuts
+
+# make a place to mount an external volume
+CMD mkdir /voyager_calib && \
+    chown donuts /voyager_
 
 # install requirements first to help with caching
 COPY requirements.txt ./
