@@ -20,7 +20,8 @@ Initial scribbles to have an event driven version of donuts
       1. Create a file called ```mysql_root``` with no file extension
       1. Inside that file save the desired root password.
       1. This root password file should not be commited to any git repository.
-      1. ```secrets/mysql_root``` has been manually excluded from version control in the ```.gitignore``` file
+      1. Anything in the ```secrets/``` folder is automatically excluded from version control in the ```.gitignore``` file
+      1. Once you've memorised the root password and have built donuts (see below) and ran it a few times (see further below), you should delete the ```secrets/mysql_root``` file.
    1. Build the Docker image for Donuts/Voyager
       1. ```docker build -t voyager_donuts .```
 
