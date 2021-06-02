@@ -31,3 +31,6 @@ USER donuts
 
 # add entry points
 ENTRYPOINT ["/tini", "--"]
+
+# start the code once the container is running
+CMD python voyager_donuts.py
