@@ -1562,7 +1562,7 @@ if __name__ == "__main__":
 
     user = "user"
     # user = 'itelescope'
-    config = {"socket_ip": "0.0.0.0",
+    config = {"socket_ip": "127.0.0.1",
               "socket_port": 5950,
               "host": "Gavin-Telescope",
               "calibration_root": f"C:\\Users\\{user}\\Documents\\Voyager\\DonutsCalibration",
