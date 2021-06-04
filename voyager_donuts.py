@@ -1,7 +1,6 @@
 """
 Test script for guiding Voyager with donuts
 """
-import os
 import sys
 import socket as s
 import traceback
@@ -440,20 +439,20 @@ class Voyager():
         None
         """
         # fetch the image name form the full path
-        filename = path.split('\\')[-1]
+        filename = path.split('/')[-1]
 
         # get tonight, break path on this string
         night = vutils.get_tonight()
 
         if data_type == "data":
             cont_root = self.data_root_host
-            cont_path = f"{cont_root}/{night}/{filename}"
+            cont_path = f"{cont_root}\\{night}\\{filename}"
         elif data_type == "calib":
             cont_root = self.calibration_root_host
-            cont_path = f"{cont_root}/{night}/{filename}"
+            cont_path = f"{cont_root}\\{night}\\{filename}"
         else:
             cont_root = self.reference_root_host
-            cont_path = f"{cont_root}/{filename}"
+            cont_path = f"{cont_root}\\{filename}"
 
         return cont_path
 
@@ -1251,7 +1250,7 @@ class Voyager():
         self._scale_store = defaultdict(list)
 
         # set up calibration directory
-        self._calibration_dir, _ = vutils.get_data_dir(self.calibration_root, windows=False)
+        self._calibration_dir = vutils.get_data_dir(self.calibration_root, windows=False)
 
         # point the telescope to 1h west of the meridian
 
@@ -1687,9 +1686,7 @@ if __name__ == "__main__":
     if args.logging_location == 'stdout':
         logging.basicConfig(stream=sys.stdout, level=level)
     else:
-        _, night = vutils.get_data_dir(config['logging_root'], windows=False)
-        if not os.path.exists(config['logging_root']):
-            os.mkdir(config['logging_root'])
+        night = vutils.get_tonight()
         log_filename = f"{night}_donuts.log"
         log_file_path = f"{config['logging_root']}/{log_filename}"
         logging.basicConfig(filename=log_file_path,
