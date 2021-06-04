@@ -329,6 +329,7 @@ class Voyager():
         # add a message object for sharing between methods
         self._msg = Message()
 
+        # some internal tracking variables
         self._image_id = 0
         self._comms_id = 0
         self._last_poll_time = None
@@ -409,6 +410,9 @@ class Voyager():
 
         # start with the guider unstabilised
         self.__initialise_pid_loop(stabilised=False)
+
+        # some donuts algorithm config
+        self.donuts_subtract_bkg = config['donuts_subtract_bkg']
 
     def __resolve_host_path(self, data_type, path):
         """
@@ -735,7 +739,7 @@ class Voyager():
                         do_correction = False
 
                     # make this image the reference, update the last field/filter also
-                    self._donuts_ref = Donuts(ref_file)
+                    self._donuts_ref = Donuts(ref_file, subtract_bkg=self.donuts_subtract_bkg)
                 else:
                     do_correction = True
 
@@ -1271,7 +1275,7 @@ class Voyager():
             self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename_host}")
 
         # make the image we took the reference image
-        donuts_ref = Donuts(filename_cont)
+        donuts_ref = Donuts(filename_cont, subtract_bkg=self.donuts_subtract_bkg)
 
         # loop over the 4 directions for the requested number of iterations
         for _ in range(self.calibration_n_iterations):
@@ -1308,7 +1312,7 @@ class Voyager():
                 logging.info(f"SHIFT: {direction} {magnitude}")
                 self._direction_store[i].append(direction)
                 self._scale_store[i].append(magnitude)
-                donuts_ref = Donuts(filename_cont)
+                donuts_ref = Donuts(filename_cont, subtract_bkg=self.donuts_subtract_bkg)
 
         # now do some analysis on the run from above
         # check that the directions are the same every time for each orientation
@@ -1673,7 +1677,8 @@ if __name__ == "__main__":
                                  "-y": 62.09},
               "guide_directions": {"+y": 2, "-y": 3, "+x": 1, "-x": 0},
               "logging_level": "info",
-              "logging_location": "stdout"
+              "logging_location": "stdout",
+              "donuts_subtract_bkg": False
               }
 
     # get the logging level:
