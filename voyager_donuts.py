@@ -43,11 +43,11 @@ def arg_parse():
     p.add_argument('--logging_level',
                    type=str,
                    choices=['info', 'debug'],
-                   default='info')
+                   default='debug')
     p.add_argument('--logging_location',
                    type=str,
                    choices=['stdout', 'file'],
-                   default='file')
+                   default='stdout')
     return p.parse_args()
 
 class DonutsStatus():

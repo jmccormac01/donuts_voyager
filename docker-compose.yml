@@ -24,7 +24,7 @@ services:
     network_mode: "host"
     volumes:
       - c:/Users/user/Documents/Voyager/DonutsCalibration:/voyager_calib
-      - c:/Users/user/Documents/Voyager/DonutsLogs:/voyager_log
+      - c:/Users/user/Documents/Voyager/DonutsLog:/voyager_log
       - c:/Users/user/Documents/Voyager/DonutsData:/voyager_data
       - c:/Users/user/Documents/Voyager/DonutsReference:/voyager_ref
 
