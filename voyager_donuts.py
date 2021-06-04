@@ -1256,7 +1256,7 @@ class Voyager():
 
         # get the reference filename
         filename_cont = self.__calibration_filename("R", 0)
-        filename_host = self.__resolve_host_path(filename_cont)
+        filename_host = self.__resolve_host_path("calib", filename_cont)
 
         # create a command uuid
         shot_uuid = str(uuid.uuid4())
@@ -1292,7 +1292,7 @@ class Voyager():
                 try:
                     # get the filenames
                     filename_cont = self.__calibration_filename(i, self.calibration_step_size_ms)
-                    filename_host = self.__resolve_host_path(filename_cont)
+                    filename_host = self.__resolve_host_path("calib", filename_cont)
 
                     shot_uuid = str(uuid.uuid4())
                     message_shot = self._msg.camera_shot(shot_uuid, self._comms_id, self.calibration_exptime, "true", filename_host)
