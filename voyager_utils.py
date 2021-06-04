@@ -51,7 +51,7 @@ def get_tonight():
     return night
 
 # get tonights directory
-def get_data_dir(root_dir, data_subdir=""):
+def get_data_dir(root_dir, windows=True):
     """
     Get tonight's data directory and night string
 
@@ -73,11 +73,10 @@ def get_data_dir(root_dir, data_subdir=""):
     None
     """
     night = get_tonight()
-    data_loc = "{}\\{}".format(root_dir, night)
-    # adds capability for data to live in folders
-    # inside the nightly folder, as for saintex
-    if data_subdir != "":
-        data_loc = f"{data_loc}\\{data_subdir}"
+    if windows:
+        data_loc = f"{root_dir}\\{night}"
+    else:
+        data_loc = f"{root_dir}/{night}"
     if not os.path.exists(data_loc):
         os.mkdir(data_loc)
     return data_loc
