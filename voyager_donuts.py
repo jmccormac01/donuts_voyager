@@ -22,7 +22,6 @@ from PID import PID
 # TODO: Add logging to database
 # TODO: Add RemoteActionAbort call when things go horribly wrong
 # TODO: Determine how to trigger/abort donuts script from drag_script
-# TODO: Set initial pull in phase again, reset PID after settled
 # this has been ignored for now while testing
 
 # pylint: disable=line-too-long
@@ -49,7 +48,7 @@ def arg_parse():
     p.add_argument('--logging_location',
                    type=str,
                    choices=['stdout', 'file'],
-                   default='stdout')
+                   default='file')
     return p.parse_args()
 
 class DonutsStatus():
@@ -144,8 +143,6 @@ class Message():
         ------
         None
         """
-        # TODO: add more features? (filter etc?)
-        # do we need that?
         message = {"method": "RemoteCameraShot",
                    "params": {"UID": uid,
                               "Expo": exptime,
@@ -344,10 +341,14 @@ class Voyager():
         # set up a queue to send back results from guide_loop
         self._results_queue = queue.Queue(maxsize=1)
 
-        # set up some calibration dir info
+        # set up some root directory info for host and container
         self.calibration_root = config['calibration_root']
-        if not os.path.exists(self.calibration_root):
-            os.mkdir(self.calibration_root)
+        self.reference_root = config['reference_root']
+        self.data_root = config['data_root']
+        self.calibration_root_host = config['calibration_root_host']
+        self.reference_root_host = config['reference_root_host']
+        self.data_root_host = config['data_root_host']
+
         # this calibration directory inside calibration root gets made if we calibrate
         self._calibration_dir = None
         self.calibration_step_size_ms = config['calibration_step_size_ms']
@@ -409,6 +410,98 @@ class Voyager():
 
         # start with the guider unstabilised
         self.__initialise_pid_loop(stabilised=False)
+
+    def __resolve_host_path(self, data_type, path):
+        """
+        Take in a path from Voyager which is absolute on
+        the container. We need a path to the volume on the
+        host instead.
+
+        Data are mounted to self.data_root_host
+        Refs are mounted to self.reference_root_host
+        Donuts calibs are mounted to self.calibration_root_host
+        Logs are mounted to self.logging_root_host
+
+        Parameters
+        ----------
+        data_type : string
+            which type of data are we working with?
+            data, calib or references?
+        path : string
+            host path to image
+
+        Returns
+        -------
+        cont_path : string
+            host path as seen from inside the container
+
+        Raises
+        ------
+        None
+        """
+        # fetch the image name form the full path
+        filename = path.split('\\')[-1]
+
+        # get tonight, break path on this string
+        night = vutils.get_tonight()
+
+        if data_type == "data":
+            cont_root = self.data_root_host
+            cont_path = f"{cont_root}/{night}/{filename}"
+        elif data_type == "calib":
+            cont_root = self.calibration_root_host
+            cont_path = f"{cont_root}/{night}/{filename}"
+        else:
+            cont_root = self.reference_root_host
+            cont_path = f"{cont_root}/{filename}"
+
+        return cont_path
+
+    def __resolve_container_path(self, data_type, path):
+        """
+        Take in a path from Voyager which is absolute on
+        the host machine. We need a path to the volume inside
+        the Docker container.
+
+        Data are mounted to self.data_root
+        Refs are mounted to self.reference_root
+        Donuts calibs are mounted to self.calibration_root
+        Logs are mounted to self.logging_root
+
+        Parameters
+        ----------
+        data_type : string
+            which type of data are we working with?
+            data, calib or references?
+        path : string
+            host path to image
+
+        Returns
+        -------
+        cont_path : string
+            host path as seen from inside the container
+
+        Raises
+        ------
+        None
+        """
+        # fetch the image name form the full path
+        filename = path.split('\\')[-1]
+
+        # get tonight, break path on this string
+        night = vutils.get_tonight()
+
+        if data_type == "data":
+            cont_root = self.data_root
+            cont_path = f"{cont_root}/{night}/{filename}"
+        elif data_type == "calib":
+            cont_root = self.calibration_root
+            cont_path = f"{cont_root}/{night}/{filename}"
+        else:
+            cont_root = self.reference_root
+            cont_path = f"{cont_root}/{filename}"
+
+        return cont_path
 
     def run(self):
         """
@@ -481,12 +574,18 @@ class Voyager():
                             # send a DonutsRecenterStart reply
                             self.__send_donuts_message_to_voyager("DonutsRecenterStart")
 
+                            # make a containerised version of the file path and
                             # keep a local copy of the image to guide on's path
-                            last_image = rec[self._voyager_path_keyword]
+                            host_path = rec[self._voyager_path_keyword]
+                            last_image = self.__resolve_container_path("data", host_path)
+                            # TODO: remove after testing
+                            #last_image = rec[self._voyager_path_keyword]
 
                             # set the latest image and notify the guide loop thread to wake up
                             with self._guide_condition:
-                                self._latest_guide_frame = rec[self._voyager_path_keyword]
+                                # TODO: remove after testing
+                                #self._latest_guide_frame = rec[self._voyager_path_keyword]
+                                self._latest_guide_frame = last_image
                                 self._guide_condition.notify()
 
                             # fetch the results from the queue
@@ -607,6 +706,12 @@ class Voyager():
                 # pylint: enable=no-member
 
                 # if something changes or we haven't started yet, sort out a reference image
+
+                # TODO handle ref file copying to safe location
+                # copy the file to the autoguider_ref location
+                #os.system('cp {} {}'.format(ref_image, AUTOGUIDER_REF_DIR))
+                #copyfile(ref_image_path, "{}/{}".format(AUTOGUIDER_REF_DIR, ref_image))
+
                 if current_field != self._last_field or current_filter != self._last_filter or self._donuts_ref is None:
                     # reset PID loop to unstabilised state
                     self.__initialise_pid_loop(stabilised=False)
@@ -795,7 +900,6 @@ class Voyager():
         # send the polling string
         polling_str = json.dumps(polling) + "\r\n"
         _ = self.__send(polling_str)
-        # TODO: do something if not sent?
 
     @staticmethod
     def __parse_jsonrpc(response):
@@ -900,7 +1004,6 @@ class Voyager():
         # send the command
         msg_str = json.dumps(message) + "\r\n"
         _ = self.__send(msg_str)
-        # TODO: do something if not sent?
 
     def __send_abort_message_to_voyager(self, uid, idd):
         """
@@ -929,11 +1032,6 @@ class Voyager():
 
         # send the command
         _ = self.__send(msg_str)
-        # TODO: do something if not sent?
-
-        # TODO: we should probably wait to check the jsonrpc for abort here also
-        # skip this for now. I think we need a generic send/receive method. Will
-        # bake it into that later
 
     def __send_two_way_message_to_voyager(self, message):
         """
@@ -1158,19 +1256,23 @@ class Voyager():
         # point the telescope to 1h west of the meridian
 
         # get the reference filename
-        filename = self.__calibration_filename("R", 0)
+        filename_cont = self.__calibration_filename("R", 0)
+        filename_host = self.__resolve_host_path(filename_cont)
+
+        # create a command uuid
         shot_uuid = str(uuid.uuid4())
+
         # take an image at the current location
         try:
-            message_shot = self._msg.camera_shot(shot_uuid, self._comms_id, self.calibration_exptime, "true", filename)
+            message_shot = self._msg.camera_shot(shot_uuid, self._comms_id, self.calibration_exptime, "true", filename_host)
             self.__send_two_way_message_to_voyager(message_shot)
             self._comms_id += 1
             self._image_id += 1
         except Exception:
-            self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename}")
+            self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename_host}")
 
         # make the image we took the reference image
-        donuts_ref = Donuts(filename)
+        donuts_ref = Donuts(filename_cont)
 
         # loop over the 4 directions for the requested number of iterations
         for _ in range(self.calibration_n_iterations):
@@ -1189,22 +1291,25 @@ class Voyager():
 
                 # take an image
                 try:
-                    filename = self.__calibration_filename(i, self.calibration_step_size_ms)
+                    # get the filenames
+                    filename_cont = self.__calibration_filename(i, self.calibration_step_size_ms)
+                    filename_host = self.__resolve_host_path(filename_cont)
+
                     shot_uuid = str(uuid.uuid4())
-                    message_shot = self._msg.camera_shot(shot_uuid, self._comms_id, self.calibration_exptime, "true", filename)
+                    message_shot = self._msg.camera_shot(shot_uuid, self._comms_id, self.calibration_exptime, "true", filename_host)
                     self.__send_two_way_message_to_voyager(message_shot)
                     self._comms_id += 1
                     self._image_id += 1
                 except Exception:
-                    self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename}")
+                    self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename_host}")
 
                 # measure the offset and update the reference image
-                shift = donuts_ref.measure_shift(filename)
+                shift = donuts_ref.measure_shift(filename_cont)
                 direction, magnitude = self.__determine_shift_direction_and_magnitude(shift)
                 logging.info(f"SHIFT: {direction} {magnitude}")
                 self._direction_store[i].append(direction)
                 self._scale_store[i].append(magnitude)
-                donuts_ref = Donuts(filename)
+                donuts_ref = Donuts(filename_cont)
 
         # now do some analysis on the run from above
         # check that the directions are the same every time for each orientation
@@ -1469,10 +1574,6 @@ class Voyager():
         else:
             pass
 
-        # TODO: add logging
-        #logMessageToDb(args.instrument, "x shift: {:.2f}".format(float(shift_x)))
-        #logMessageToDb(args.instrument, "y shift: {:.2f}".format(float(shift_y)))
-
         # get telescope declination to scale RA corrections
         dec_rads = np.radians(self._declination)
         cos_dec = np.cos(dec_rads)
@@ -1488,8 +1589,6 @@ class Voyager():
         # kill anything that is > sigma_buffer sigma buffer stats, but only after buffer is full
         # otherwise, wait to get better stats
         if len(self._buff_x) < self.guide_buffer_length and len(self._buff_y) < self.guide_buffer_length:
-            # TODO: add logging
-            # logMessageToDb(args.instrument, 'Filling AG stats buffer...')
             logging.info("Filling AG stats buffer")
             self._buff_x_sigma = 0.0
             self._buff_y_sigma = 0.0
@@ -1497,9 +1596,6 @@ class Voyager():
             self._buff_x_sigma = np.std(self._buff_x)
             self._buff_y_sigma = np.std(self._buff_y)
             if abs(x) > self.guide_buffer_sigma * self._buff_x_sigma or abs(y) > self.guide_buffer_sigma * self._buff_y_sigma:
-                # TODO: add logging
-                #logMessageToDb(args.instrument,
-                #               'Guide error > {} sigma * buffer errors, ignoring...'.format(SIGMA_BUFFER))
                 # store the original values in the buffer, even if correction
                 # was too big, this will allow small outliers to be caught
                 logging.warning(f"Guide correction(s) too large x:{x:.2f} y:{y:.2f}")
@@ -1519,15 +1615,12 @@ class Voyager():
         # trim if so, do nothing otherwise
         pidx, pidy = self.__truncate_correction(pidx, pidy)
 
-        # TODO: add logging
-        #logMessageToDb(args.instrument, "PID: {0:.2f}  {1:.2f}".format(float(pidx), float(pidy)))
         logging.info(f"PID: x:{pidx:.2f} y:{pidy:.2f}")
+
+        # TODO log shifts to database
 
         # convert correction into direction/duration objects
         direction, duration = self.__determine_direction_and_duration(pidx, pidy, cos_dec)
-
-        # TODO: add logging
-        #logMessageToDb(args.instrument, "Guide correction Applied")
 
         # store the original values in the buffer
         self._buff_x.append(x)
@@ -1540,6 +1633,49 @@ if __name__ == "__main__":
 
     # grab the command line arguments
     args = arg_parse()
+
+    # TODO: load this config from a file
+    # NOTE: the root directories here must be the same as in the docker compose file
+    user = "user"
+    #user = "itelescope"
+    config = {"socket_ip": "host.docker.internal",
+              "socket_port": 5950,
+              "host": "Gavin-Telescope",
+              "calibration_root": "/voyager_calib",
+              "logging_root": "/voyager_log",
+              "data_root": "/voyager_data",
+              "reference_root": "/voyager_ref",
+              "calibration_root_host": f"C:\\Users\\{user}\\Documents\\Voyager\\DonutsCalib",
+              "logging_root_host": f"C:\\Users\\{user}\\Documents\\Voyager\\DonutsLog",
+              "data_root_host": f"C:\\Users\\{user}\\Documents\\Voyager\\DonutsData",
+              "reference_root_host": f"C:\\Users\\{user}\\Documents\\Voyager\\DonutsReference",
+              "calibration_step_size_ms": 5000,
+              "calibration_n_iterations": 5,
+              "calibration_exptime": 20,
+              "image_extension": ".FIT",
+              "filter_keyword": "FILTER",
+              "field_keyword": "OBJECT",
+              "ra_keyword": "OBJCTRA",
+              "dec_keyword": "OBJCTDEC",
+              "xbin_keyword": "XBINNING",
+              "ybin_keyword": "YBINNING",
+              "ra_axis": "y",
+              "pid_coeffs": {"x": {"p": 0.70, "i": 0.02, "d": 0.0},
+                             "y": {"p": 0.70, "i": 0.02, "d": 0.0},
+                             "set_x": 0.0,
+                             "set_y": 0.0},
+              "guide_buffer_length": 20,
+              "guide_buffer_sigma": 10,
+              "max_error_pixels": 20,
+              "n_images_to_stabilise": 10,
+              "pixels_to_time": {"+x": 62.54,
+                                 "-x": 62.13,
+                                 "+y": 61.95,
+                                 "-y": 62.09},
+              "guide_directions": {"+y": 2, "-y": 3, "+x": 1, "-x": 0},
+              "logging_level": "info",
+              "logging_location": "stdout"
+              }
 
     # get the logging level:
     if args.logging_level == 'debug':
@@ -1559,39 +1695,6 @@ if __name__ == "__main__":
         logging.basicConfig(filename=log_file_path,
                             level=level,
                             format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
-
-    # TODO share the data directory with the container
-
-    user = "user"
-    # user = 'itelescope'
-    config = {"socket_ip": "host.docker.internal",
-              "socket_port": 5950,
-              "host": "Gavin-Telescope",
-              "calibration_root": "/voyager_calib",
-              "logging_root": "/voyager/DonutsLogs",
-              "calibration_step_size_ms": 5000,
-              "calibration_n_iterations": 5,
-              "calibration_exptime": 20,
-              "image_extension": ".FIT",
-              "filter_keyword": "FILTER",
-              "field_keyword": "OBJECT",
-              "ra_keyword": "OBJCTRA",
-              "dec_keyword": "OBJCTDEC",
-              "ra_axis": "y",
-              "pid_coeffs": {"x": {"p": 0.70, "i": 0.02, "d": 0.0},
-                             "y": {"p": 0.70, "i": 0.02, "d": 0.0},
-                             "set_x": 0.0,
-                             "set_y": 0.0},
-              "guide_buffer_length": 20,
-              "guide_buffer_sigma": 10,
-              "max_error_pixels": 20,
-              "n_images_to_stabilise": 10,
-              "pixels_to_time": {"+x": 62.54,
-                                 "-x": 62.13,
-                                 "+y": 61.95,
-                                 "-y": 62.09},
-              "guide_directions": {"+y": 2, "-y": 3, "+x": 1, "-x": 0},
-              }
 
     voyager = Voyager(config)
     voyager.run()

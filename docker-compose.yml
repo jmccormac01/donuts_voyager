@@ -24,10 +24,9 @@ services:
     network_mode: "host"
     volumes:
       - c:/Users/user/Documents/Voyager/DonutsCalibration:/voyager_calib
-
-  admin:
-    image: adminer
-    network_mode: "host"
+      - c:/Users/user/Documents/Voyager/DonutsLogs:/voyager_log
+      - c:/Users/user/Documents/Voyager/DonutsData:/voyager_data
+      - c:/Users/user/Documents/Voyager/DonutsReference:/voyager_ref
 
 secrets:
   mysql_root:

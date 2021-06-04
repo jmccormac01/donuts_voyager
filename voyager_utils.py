@@ -41,6 +41,15 @@ def get_am_or_pm():
         token = 1
     return token
 
+def get_tonight():
+    """
+    Get tonight's date in YYYY-MM-DD format
+    """
+    token = get_am_or_pm()
+    d = date.today()-timedelta(days=token)
+    night = "{:d}-{:02d}-{:02d}".format(d.year, d.month, d.day)
+    return night
+
 # get tonights directory
 def get_data_dir(root_dir, data_subdir=""):
     """
@@ -63,9 +72,7 @@ def get_data_dir(root_dir, data_subdir=""):
     ------
     None
     """
-    token = get_am_or_pm()
-    d = date.today()-timedelta(days=token)
-    night = "{:d}{:02d}{:02d}".format(d.year, d.month, d.day)
+    night = get_tonight()
     data_loc = "{}\\{}".format(root_dir, night)
     # adds capability for data to live in folders
     # inside the nightly folder, as for saintex
@@ -73,4 +80,4 @@ def get_data_dir(root_dir, data_subdir=""):
         data_loc = f"{data_loc}\\{data_subdir}"
     if not os.path.exists(data_loc):
         os.mkdir(data_loc)
-    return data_loc, night
+    return data_loc
