@@ -748,8 +748,9 @@ class Voyager():
                     else:
                         # set the last image as reference
                         self._ref_file = last_image
+                        ref_filename = self._ref_file.split('/')[-1]
                         # copy it to the special storage area
-                        copyfile(self._ref_file, f"{self.reference_root}/{self._ref_file}")
+                        copyfile(self._ref_file, f"{self.reference_root}/{ref_filename}")
                         # set thw copied image to the reference in the database
                         vdb.set_reference_image(self._ref_file, current_field, current_filter,
                                                 current_xbin, current_ybin)
