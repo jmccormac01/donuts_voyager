@@ -321,6 +321,8 @@ class Voyager():
         self.field_keyword = config['field_keyword']
         self.ra_keyword = config['ra_keyword']
         self.dec_keyword = config['dec_keyword']
+        self.xbin_keyword = config['xbin_keyword']
+        self.ybin_keyword = config['ybin_keyword']
         self.ra_axis = config['ra_axis']
         self._declination = None
 

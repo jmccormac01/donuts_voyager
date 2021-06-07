@@ -7,7 +7,7 @@ from contextlib import contextmanager
 import pymysql
 
 @contextmanager
-def db_cursor(host='127.0.0.0.1', user='donuts',
+def db_cursor(host='127.0.0.1', port=3306, user='donuts',
               password='', db='donuts'):
     """
     Grab a database cursor
