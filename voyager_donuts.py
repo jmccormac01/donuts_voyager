@@ -11,14 +11,15 @@ import queue
 import json
 import uuid
 import argparse as ap
+from shutil import copyfile
 from collections import defaultdict
 import numpy as np
 from astropy.io import fits
 from donuts import Donuts
 import voyager_utils as vutils
+import voyager_db as vdb
 from PID import PID
 
-# TODO: Add logging to database
 # TODO: Add RemoteActionAbort call when things go horribly wrong
 # TODO: Determine how to trigger/abort donuts script from drag_script
 # this has been ignored for now while testing
@@ -359,13 +360,12 @@ class Voyager():
         self._direction_store = None
         self._scale_store = None
 
-        # set up a temporary dict to hold reference images
-        # this will be a datebase later
-        # TODO: remove this later
-        self._ref_store = defaultdict(dict)
         # add some places to keep track of reference images change overs
+        self._ref_file = None
         self._last_field = None
         self._last_filter = None
+        self._last_xbin = None
+        self._last_ybin = None
         self._donuts_ref = None
 
         # set up the PID loop coeffs etc
@@ -696,7 +696,6 @@ class Voyager():
                     self._guide_condition.wait()
 
                 last_image = self._latest_guide_frame
-                self._latest_guide_frame = None
 
                 # check if we're still observing the same field
                 # pylint: disable=no-member
@@ -704,18 +703,15 @@ class Voyager():
                     # current field and filter?
                     current_filter = ff[0].header[self.filter_keyword]
                     current_field = ff[0].header[self.field_keyword]
+                    current_xbin = ff[0].header[self.xbin_keyword]
+                    current_ybin = ff[0].header[self.ybin_keyword]
                     declination = ff[0].header[self.dec_keyword]
                     self._declination = self.__dec_str_to_deg(declination)
                 # pylint: enable=no-member
 
                 # if something changes or we haven't started yet, sort out a reference image
-
-                # TODO handle ref file copying to safe location
-                # copy the file to the autoguider_ref location
-                #os.system('cp {} {}'.format(ref_image, AUTOGUIDER_REF_DIR))
-                #copyfile(ref_image_path, "{}/{}".format(AUTOGUIDER_REF_DIR, ref_image))
-
-                if current_field != self._last_field or current_filter != self._last_filter or self._donuts_ref is None:
+                if current_field != self._last_field or current_filter != self._last_filter or \
+                    current_xbin != self._last_xbin or current_ybin != self._last_ybin or self._donuts_ref is None:
                     # reset PID loop to unstabilised state
                     self.__initialise_pid_loop(stabilised=False)
                     # reset the guide buffer
@@ -723,29 +719,51 @@ class Voyager():
                     # reset stabilised flag
                     self._stabilised = False
 
+                    # TODO: remove this block when db stuff tested
                     # Look for a reference image for this field/filter
                     # TODO: add db backend here, see acp_ag.py for layout
                     # add new reference images to the database
                     # copy them to special storage area too, for now we won't bother
-                    try:
-                        ref_file = self._ref_store[current_field][current_filter]
+                    #try:
+                    #    ref_file = self._ref_store[current_field][current_filter]
+                    #    do_correction = True
+                    #except KeyError:
+                    #    # nothing in the store for this field/filter, so add it for later
+                    #    self._ref_store[current_field][current_filter] = last_image
+                    #    # use this image as the reference
+                    #    ref_file = last_image
+                    #    # skip the correction as we just made a new reference
+                    #    do_correction = False
+
+                    # replacement block using database
+                    # look for a reference image for this field, filter, binx and biny
+                    self._ref_file = vdb.get_reference_image_path(current_field, current_filter,
+                                                                  current_xbin, current_ybin)
+
+                    # if we have a reference, use it. Otherwise store this image as the new reference frame
+                    if self._ref_file is not None:
                         do_correction = True
-                    except KeyError:
-                        # nothing in the store for this field/filter, so add it for later
-                        self._ref_store[current_field][current_filter] = last_image
-                        # use this image as the reference
-                        ref_file = last_image
-                        # skip the correction as we just made a new reference
+                    else:
+                        # set the last image as reference
+                        self._ref_file = last_image
+                        # copy it to the special storage area
+                        copyfile(self._ref_file, f"{self.reference_root}/{self._ref_file}")
+                        # set thw copied image to the reference in the database
+                        vdb.set_reference_image(self._ref_file, current_field, current_filter,
+                                                current_xbin, current_ybin)
+                        # set skip correction as new reference was just defined as this current image
                         do_correction = False
 
                     # make this image the reference, update the last field/filter also
-                    self._donuts_ref = Donuts(ref_file, subtract_bkg=self.donuts_subtract_bkg)
+                    self._donuts_ref = Donuts(self._ref_file, subtract_bkg=self.donuts_subtract_bkg)
                 else:
                     do_correction = True
 
                 # update the last field/filter values
                 self._last_field = current_field
                 self._last_filter = current_filter
+                self._last_xbin = current_xbin
+                self._last_ybin = current_ybin
 
                 # do the correction if required
                 if do_correction:
@@ -765,6 +783,9 @@ class Voyager():
                                  "y": self.guide_directions["+y"]}
                     duration = {"x": 0, "y": 0}
                     self._results_queue.put((direction, duration))
+
+                # set this to None for the next image
+                self._latest_guide_frame = None
 
 
     def __open_socket(self):
@@ -1533,26 +1554,32 @@ class Voyager():
             for X and Y
         """
         # get x and y from shift object
-        x = shift.x.value
-        y = shift.y.value
-
-        # TODO: go through this with first few images in mind
+        shift_x = shift.x.value
+        shift_y = shift.y.value
 
         # handle big shifts during stabilisation and when stabilised
-        if (abs(x) > self.max_error_pixels or abs(y) > self.max_error_pixels) and self._stabilised:
-            logging.warning(f"Offset larger than max allowed shift {self.max_error_pixels}: x: {x} y:{y}")
+        if (abs(shift_x) > self.max_error_pixels or abs(shift_y) > self.max_error_pixels) and self._stabilised:
+            logging.warning(f"Offset larger than max allowed shift {self.max_error_pixels}: x: {shift_x} y:{shift_y}")
             logging.warning("Skipping this correction...")
+
+            # make a shift arguments tuple to store in the database
+            shift_args = (self._ref_file, self._latest_guide_frame, self._stabilised, shift_x, shift_y,
+                          0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1, 1)
+            # log the culled correction to the database
+            vdb.log_shifts_to_db(shift_args)
+
             direction, duration = self.__get_null_correction()
             return direction, duration
         # if we're stabilising, limit big shifts to the max value during this phase
-        elif (abs(x) > self.max_error_pixels or abs(y) > self.max_error_pixels) and not self._stabilised:
+        elif (abs(shift_x) > self.max_error_pixels or abs(shift_y) > self.max_error_pixels) and not self._stabilised:
             # if x is too big, limit it
-            x, y = self.__truncate_correction(x, y)
+            pre_pid_x, pre_pid_y = self.__truncate_correction(shift_x, shift_y)
         else:
-            pass
+            pre_pid_x = shift_x
+            pre_pid_y = shift_y
 
         # handle stabilisation
-        if not self._stabilised and x < 2 and y < 2:
+        if not self._stabilised and pre_pid_x < 2 and pre_pid_y < 2:
             # set flag
             self._stabilised = True
             # reset the number of images to stabilise for next time
@@ -1564,12 +1591,12 @@ class Voyager():
             # reset the guide buffer
             self.__initialise_guide_buffer()
         # continue trying to stabilise
-        elif not self._stabilised and (x > 2 or y > 2) and self._images_to_stabilise >= 0:
+        elif not self._stabilised and (pre_pid_x > 2 or pre_pid_y > 2) and self._images_to_stabilise >= 0:
             # keep forcing 100% proportional correction
             self.__initialise_pid_loop(stabilised=False)
             self._images_to_stabilise -= 1
         # check if we've been trying to stabilise for too long
-        elif not self._stabilised and (x > 2 or y > 2) and self._images_to_stabilise < 0:
+        elif not self._stabilised and (pre_pid_x > 2 or pre_pid_y > 2) and self._images_to_stabilise < 0:
             logging.error(f"We've been trying to stabilise >{self.n_images_to_stabilise} images")
             logging.error("There appears to be an error, quiting donuts")
             self.__send_donuts_message_to_voyager("DonutsRecenterError", "Failed to stabilise guiding")
@@ -1598,12 +1625,19 @@ class Voyager():
         else:
             self._buff_x_sigma = np.std(self._buff_x)
             self._buff_y_sigma = np.std(self._buff_y)
-            if abs(x) > self.guide_buffer_sigma * self._buff_x_sigma or abs(y) > self.guide_buffer_sigma * self._buff_y_sigma:
+            if abs(pre_pid_x) > self.guide_buffer_sigma * self._buff_x_sigma or abs(pre_pid_y) > self.guide_buffer_sigma * self._buff_y_sigma:
                 # store the original values in the buffer, even if correction
                 # was too big, this will allow small outliers to be caught
-                logging.warning(f"Guide correction(s) too large x:{x:.2f} y:{y:.2f}")
-                self._buff_x.append(x)
-                self._buff_y.append(y)
+                logging.warning(f"Guide correction(s) too large x:{pre_pid_x:.2f} y:{pre_pid_y:.2f}")
+                self._buff_x.append(pre_pid_x)
+                self._buff_y.append(pre_pid_y)
+
+                # make a shift arguments tuple to store in the database
+                shift_args = (self._ref_file, self._latest_guide_frame, self._stabilised, shift_x, shift_y,
+                              pre_pid_x, pre_pid_y, 0.0, 0.0, 0.0, 0.0, self._buff_x_sigma, self._buff_y_sigma,
+                              1, 1)
+                # log the culled correction to the database
+                vdb.log_shifts_to_db(shift_args)
 
                 # send back empty correction
                 direction, duration = self.__get_null_correction()
@@ -1611,23 +1645,29 @@ class Voyager():
 
         # pass corrections through the PID controller
         # update the PID controllers, run them in parallel
-        pidx = self._pid_x.update(x) * -1
-        pidy = self._pid_y.update(y) * -1
+        post_pid_x = self._pid_x.update(pre_pid_x) * -1
+        post_pid_y = self._pid_y.update(pre_pid_y) * -1
+        logging.info(f"PID: x:{post_pid_x:.2f} y:{post_pid_y:.2f}")
 
         # check if we went over the max allowed shift
         # trim if so, do nothing otherwise
-        pidx, pidy = self.__truncate_correction(pidx, pidy)
+        final_x, final_y = self.__truncate_correction(post_pid_x, post_pid_y)
 
-        logging.info(f"PID: x:{pidx:.2f} y:{pidy:.2f}")
+        logging.info(f"PID[trunc]: x:{final_x:.2f} y:{final_y:.2f}")
 
-        # TODO log shifts to database
+        # make a shift arguments tuple to store in the database
+        shift_args = (self._ref_file, self._latest_guide_frame, self._stabilised, shift_x, shift_y,
+                      pre_pid_x, pre_pid_y, post_pid_x, post_pid_y, final_x, final_y, self._buff_x_sigma,
+                      self._buff_y_sigma, 0, 0)
+        # log the culled correction to the database
+        vdb.log_shifts_to_db(shift_args)
 
         # convert correction into direction/duration objects
-        direction, duration = self.__determine_direction_and_duration(pidx, pidy, cos_dec)
+        direction, duration = self.__determine_direction_and_duration(final_x, final_y, cos_dec)
 
-        # store the original values in the buffer
-        self._buff_x.append(x)
-        self._buff_y.append(y)
+        # store the original pre-pid values in the buffer
+        self._buff_x.append(pre_pid_x)
+        self._buff_y.append(pre_pid_y)
 
         return direction, duration
 

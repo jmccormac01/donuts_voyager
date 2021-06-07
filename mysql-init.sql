@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS autoguider_log (
    pre_pid_y float not null,
    post_pid_x float not null,
    post_pid_y float not null,
+   final_x float not null,
+   final_y float not null,
    std_buff_x float not null,
    std_buff_y float not null,
    culled_max_shift_x int(1) not null,

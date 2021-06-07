@@ -19,7 +19,6 @@ def db_cursor(host='127.0.0.0.1', user='donuts',
         with conn.cursor() as cur:
             yield cur
 
-
 def get_reference_image_path(field, filt, xbin, ybin):
     """
     Look in the database for the current
@@ -102,7 +101,7 @@ def set_reference_image(ref_image_path, field, filt, xbin, ybin):
     with db_cursor() as cur:
         cur.execute(qry, qry_args)
 
-def log_shifts_to_bb(qry_args):
+def log_shifts_to_db(qry_args):
     """
     Log the autguiding information to the database
 
@@ -121,13 +120,13 @@ def log_shifts_to_bb(qry_args):
     None
     """
     qry = """
-        INSERT INTO autoguider_log_new
+        INSERT INTO autoguider_log
         (ref_image_path, comp_image_path, stabilised, shift_x, shift_y,
-         pre_pid_x, pre_pid_y, post_pid_x, post_pid_y, std_buff_x,
-         std_buff_y, culled_max_shift_x, culled_max_shift_y)
+         pre_pid_x, pre_pid_y, post_pid_x, post_pid_y, final_x, final_y,
+         std_buff_x, std_buff_y, culled_max_shift_x, culled_max_shift_y)
         VALUES
         (%s, %s, %s, %s, %s, %s, %s,
-         %s, %s, %s, %s, %s, %s)
+         %s, %s, %s, %s, %s, %s, %s, %s)
         """
     with db_cursor() as cur:
         cur.execute(qry, qry_args)
