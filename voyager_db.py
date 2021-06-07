@@ -4,6 +4,7 @@ database. Used for storing reference images etc
 """
 from datetime import datetime
 from contextlib import contextmanager
+import logging
 import pymysql
 
 @contextmanager
@@ -13,6 +14,7 @@ def db_cursor(host='127.0.0.1', port=3306, user='donuts',
     Grab a database cursor
     """
     with pymysql.connect(host=host, \
+                         port=port, \
                          user=user, \
                          password=password, \
                          db=db) as conn:
@@ -57,9 +59,13 @@ def get_reference_image_path(field, filt, xbin, ybin):
         AND valid_until IS NULL
         """
     qry_args = (field, filt, xbin, ybin, tnow)
+
     with db_cursor() as cur:
         cur.execute(qry, qry_args)
-    result = cur.fetchone()
+        result = cur.fetchone()
+        logging.debug(f"DB: {qry}")
+        logging.debug(f"DB: {qry_args}")
+
     if not result:
         ref_image = None
     else:
@@ -100,6 +106,8 @@ def set_reference_image(ref_image_path, field, filt, xbin, ybin):
     qry_args = (ref_image_path, field, filt, xbin, ybin, tnow)
     with db_cursor() as cur:
         cur.execute(qry, qry_args)
+        logging.debug(f"DB: {qry}")
+        logging.debug(f"DB: {qry_args}")
 
 def log_shifts_to_db(qry_args):
     """
@@ -130,3 +138,5 @@ def log_shifts_to_db(qry_args):
         """
     with db_cursor() as cur:
         cur.execute(qry, qry_args)
+        logging.debug(f"DB: {qry}")
+        logging.debug(f"DB: {qry_args}")
