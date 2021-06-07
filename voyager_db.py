@@ -20,6 +20,7 @@ def db_cursor(host='127.0.0.1', port=3306, user='donuts',
                          db=db) as conn:
         with conn.cursor() as cur:
             yield cur
+        conn.commit()
 
 def get_reference_image_path(field, filt, xbin, ybin):
     """
