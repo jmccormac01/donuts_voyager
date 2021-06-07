@@ -40,20 +40,20 @@ from PID import PID
 # set this when ctrl+c happens, then exit cleanly
 EXIT_EVENT = threading.Event()
 
-def arg_parse():
-    """
-    Parse the command line arguments
-    """
-    p = ap.ArgumentParser()
-    p.add_argument('--logging_level',
-                   type=str,
-                   choices=['info', 'debug'],
-                   default='debug')
-    p.add_argument('--logging_location',
-                   type=str,
-                   choices=['stdout', 'file'],
-                   default='stdout')
-    return p.parse_args()
+#def arg_parse():
+#    """
+#    Parse the command line arguments
+#    """
+#    p = ap.ArgumentParser()
+#    p.add_argument('--logging_level',
+#                   type=str,
+#                   choices=['info', 'debug'],
+#                   default='debug')
+#    p.add_argument('--logging_location',
+#                   type=str,
+#                   choices=['stdout', 'file'],
+#                   default='stdout')
+#    return p.parse_args()
 
 class DonutsStatus():
     """
@@ -1674,7 +1674,7 @@ def signal_handler(signum, frame):
 if __name__ == "__main__":
 
     # grab the command line arguments
-    args = arg_parse()
+    #args = arg_parse()
 
     # handle ctrl+c
     signal.signal(signal.SIGINT, signal_handler)
@@ -1719,18 +1719,18 @@ if __name__ == "__main__":
                                  "-y": 62.09},
               "guide_directions": {"+y": 2, "-y": 3, "+x": 1, "-x": 0},
               "logging_level": "info",
-              "logging_location": "stdout",
+              "logging_location": "file",
               "donuts_subtract_bkg": False
               }
 
     # get the logging level:
-    if args.logging_level == 'debug':
+    if config['logging_level'] == 'debug':
         level = logging.DEBUG
     else:
         level = logging.INFO
 
     # get log location
-    if args.logging_location == 'stdout':
+    if config['logging_location'] == 'stdout':
         logging.basicConfig(stream=sys.stdout, level=level)
     else:
         night = vutils.get_tonight()
@@ -1740,5 +1740,7 @@ if __name__ == "__main__":
                             level=level,
                             format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
 
+    # set up Voyager/Donuts
     voyager = Voyager(config)
+    # run the script
     voyager.run()
