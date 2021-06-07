@@ -11,7 +11,6 @@ import queue
 import json
 import uuid
 import signal
-import argparse as ap
 from shutil import copyfile
 from collections import defaultdict
 import numpy as np
@@ -22,8 +21,6 @@ import voyager_db as vdb
 from PID import PID
 
 # TODO: Add RemoteActionAbort call when things go horribly wrong
-# TODO: Determine how to trigger/abort donuts script from drag_script
-# this has been ignored for now while testing
 
 # pylint: disable=line-too-long
 # pylint: disable=invalid-name
@@ -39,21 +36,6 @@ from PID import PID
 
 # set this when ctrl+c happens, then exit cleanly
 EXIT_EVENT = threading.Event()
-
-#def arg_parse():
-#    """
-#    Parse the command line arguments
-#    """
-#    p = ap.ArgumentParser()
-#    p.add_argument('--logging_level',
-#                   type=str,
-#                   choices=['info', 'debug'],
-#                   default='debug')
-#    p.add_argument('--logging_location',
-#                   type=str,
-#                   choices=['stdout', 'file'],
-#                   default='stdout')
-#    return p.parse_args()
 
 class DonutsStatus():
     """
@@ -1672,56 +1654,11 @@ def signal_handler(signum, frame):
 
 
 if __name__ == "__main__":
-
-    # grab the command line arguments
-    #args = arg_parse()
-
     # handle ctrl+c
     signal.signal(signal.SIGINT, signal_handler)
 
-    # TODO: load this config from a file
-    # NOTE: the root directories here must be the same as in the docker compose file
-    user = "user"
-    #user = "itelescope"
-    config = {"socket_ip": "host.docker.internal",
-              "socket_port": 5950,
-              "host": "Gavin-Telescope",
-              "calibration_root": "/voyager_calibration",
-              "logging_root": "/voyager_log",
-              "data_root": "/voyager_data",
-              "reference_root": "/voyager_reference",
-              "calibration_root_host": f"C:\\Users\\{user}\\Documents\\Voyager\\DonutsCalibration",
-              "logging_root_host": f"C:\\Users\\{user}\\Documents\\Voyager\\DonutsLog",
-              "data_root_host": f"C:\\Users\\{user}\\Documents\\Voyager\\DonutsData",
-              "reference_root_host": f"C:\\Users\\{user}\\Documents\\Voyager\\DonutsReference",
-              "calibration_step_size_ms": 5000,
-              "calibration_n_iterations": 5,
-              "calibration_exptime": 20,
-              "image_extension": ".FIT",
-              "filter_keyword": "FILTER",
-              "field_keyword": "OBJECT",
-              "ra_keyword": "OBJCTRA",
-              "dec_keyword": "OBJCTDEC",
-              "xbin_keyword": "XBINNING",
-              "ybin_keyword": "YBINNING",
-              "ra_axis": "y",
-              "pid_coeffs": {"x": {"p": 0.70, "i": 0.02, "d": 0.0},
-                             "y": {"p": 0.70, "i": 0.02, "d": 0.0},
-                             "set_x": 0.0,
-                             "set_y": 0.0},
-              "guide_buffer_length": 20,
-              "guide_buffer_sigma": 10,
-              "max_error_pixels": 20,
-              "n_images_to_stabilise": 10,
-              "pixels_to_time": {"+x": 62.54,
-                                 "-x": 62.13,
-                                 "+y": 61.95,
-                                 "-y": 62.09},
-              "guide_directions": {"+y": 2, "-y": 3, "+x": 1, "-x": 0},
-              "logging_level": "info",
-              "logging_location": "file",
-              "donuts_subtract_bkg": False
-              }
+    # load the config file
+    config = vutils.load_config('configs/config.toml')
 
     # get the logging level:
     if config['logging_level'] == 'debug':

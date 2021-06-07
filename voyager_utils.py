@@ -6,6 +6,27 @@ from datetime import (
     date,
     timedelta,
     datetime)
+import toml
+
+def load_config(filename):
+    """
+    Load the config file
+
+    Parameters
+    ----------
+    filename : string
+        Name of the configuration file to load
+
+    Returns
+    -------
+    configuration : dict
+        Configuration information
+
+    Raises
+    ------
+    None
+    """
+    return toml.load(filename)
 
 # get evening or morning
 def get_am_or_pm():
