@@ -10,6 +10,7 @@ import logging
 import queue
 import json
 import uuid
+import signal
 import argparse as ap
 from shutil import copyfile
 from collections import defaultdict
@@ -35,6 +36,9 @@ from PID import PID
 # pylint: disable=too-many-lines
 # pylint: disable=too-many-instance-attributes
 # pylint: disable=broad-except
+
+# set this when ctrl+c happens, then exit cleanly
+EXIT_EVENT = threading.Event()
 
 def arg_parse():
     """
@@ -543,6 +547,10 @@ class Voyager():
 
         # loop until told to stop
         while 1:
+            # end on ctrl+c
+            if EXIT_EVENT.set():
+                break
+
             # listen for a response or a new job to do
             rec = self.__receive()
 
@@ -583,13 +591,9 @@ class Voyager():
                             # keep a local copy of the image to guide on's path
                             host_path = rec[self._voyager_path_keyword]
                             last_image = self.__resolve_container_path("data", host_path)
-                            # TODO: remove after testing
-                            #last_image = rec[self._voyager_path_keyword]
 
                             # set the latest image and notify the guide loop thread to wake up
                             with self._guide_condition:
-                                # TODO: remove after testing
-                                #self._latest_guide_frame = rec[self._voyager_path_keyword]
                                 self._latest_guide_frame = last_image
                                 self._guide_condition.notify()
 
@@ -690,7 +694,9 @@ class Voyager():
         None
         """
         while 1:
-            # TODO: add something to permit ending this thread cleanly
+            # end on ctrl+c
+            if EXIT_EVENT.set():
+                break
 
             # block until a frame is available for processing
             with self._guide_condition:
@@ -720,22 +726,6 @@ class Voyager():
                     self.__initialise_guide_buffer()
                     # reset stabilised flag
                     self._stabilised = False
-
-                    # TODO: remove this block when db stuff tested
-                    # Look for a reference image for this field/filter
-                    # TODO: add db backend here, see acp_ag.py for layout
-                    # add new reference images to the database
-                    # copy them to special storage area too, for now we won't bother
-                    #try:
-                    #    ref_file = self._ref_store[current_field][current_filter]
-                    #    do_correction = True
-                    #except KeyError:
-                    #    # nothing in the store for this field/filter, so add it for later
-                    #    self._ref_store[current_field][current_filter] = last_image
-                    #    # use this image as the reference
-                    #    ref_file = last_image
-                    #    # skip the correction as we just made a new reference
-                    #    do_correction = False
 
                     # replacement block using database
                     # look for a reference image for this field, filter, binx and biny
@@ -1674,11 +1664,20 @@ class Voyager():
 
         return direction, duration
 
+def signal_handler(signum, frame):
+    """
+    Handle ctrl+c
+    """
+    EXIT_EVENT.set()
+
 
 if __name__ == "__main__":
 
     # grab the command line arguments
     args = arg_parse()
+
+    # handle ctrl+c
+    signal.signal(signal.SIGINT, signal_handler)
 
     # TODO: load this config from a file
     # NOTE: the root directories here must be the same as in the docker compose file
