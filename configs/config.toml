@@ -1,3 +1,7 @@
+######################################
+# Basic telescope setup. Change here #
+######################################
+
 # telescope host name
 host = "Gavin-Telescope"
 
