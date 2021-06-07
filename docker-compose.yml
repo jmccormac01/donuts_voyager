@@ -11,7 +11,7 @@ services:
       MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root
       MYSQL_DATABASE: donuts
     volumes:
-      - d:/Dropbox/Docker/mysql:/var/lib/mysql
+      - c:/Users/user/Documents/Voyager/DonutsDatabase:/var/lib/mysql
       - ./mysql-init.sql:/docker-entrypoint-initdb.d/mysql-init.sql
     network_mode: "host"
 
