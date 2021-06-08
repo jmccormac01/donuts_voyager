@@ -1,2 +1,2 @@
-cd D:\Dropbox\PythonScripts\DONUTS\DONUTS_Voyager\
+cd C:\Users\itelescope\Documents\GitHub\donuts_voyager\
 docker compose down --remove-orphans

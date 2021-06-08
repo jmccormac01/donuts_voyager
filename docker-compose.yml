@@ -23,10 +23,10 @@ services:
     image: voyager_donuts
     network_mode: "host"
     volumes:
-      - c:/Users/user/Documents/Voyager/DonutsCalibration:/voyager_calibration
-      - c:/Users/user/Documents/Voyager/DonutsLog:/voyager_log
-      - c:/Users/user/Documents/Voyager/DonutsData:/voyager_data
-      - c:/Users/user/Documents/Voyager/DonutsReference:/voyager_reference
+      - c:/Users/itelescope/Dropbox/MoanaSSO/DonutsCalibration:/voyager_calibration
+      - c:/Users/itelescope/Dropbox/MoanaSSO/DonutsLog:/voyager_log
+      - c:/Users/itelescope/Dropbox/MoanaSSO:/voyager_data
+      - c:/Users/itelescope/Dropbox/MoanaSSO/DonutsReference:/voyager_reference
 
 volumes:
   mysql-data:
