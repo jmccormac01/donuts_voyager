@@ -6,10 +6,10 @@
 host = "Gavin-Telescope"
 
 # host machine data paths, ensure these folders exist
-calibration_root_host = "C:\\Users\\user\\Documents\\Voyager\\DonutsCalibration"
-logging_root_host = "C:\\Users\\user\\Documents\\Voyager\\DonutsLog"
-data_root_host = "C:\\Users\\user\\Documents\\Voyager\\DonutsData"
-reference_root_host = "C:\\Users\\user\\Documents\\Voyager\\DonutsReference"
+calibration_root_host = "C:\\Users\\itelescope\\Dropbox\\MoanaSSO\\DonutsCalibration"
+logging_root_host = "C:\\Users\\itelescope\\Dropbox\\MoanaSSO\\DonutsLog"
+data_root_host = "C:\\Users\\itelescope\\Dropbox\\MoanaSSO"
+reference_root_host = "C:\\Users\\itelescope\\Dropbox\\MoanaSSO\\DonutsReference"
 
 # fits image characteristics
 image_extension = ".FIT"
@@ -27,7 +27,7 @@ logging_level = "info"
 logging_location = "file"
 
 # donuts algorithm info
-donuts_subtract_bkg = false
+donuts_subtract_bkg = true
 
 #########################################
 # Change this section after calibration #
