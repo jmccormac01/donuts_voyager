@@ -11,9 +11,21 @@ services:
       MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root
       MYSQL_DATABASE: donuts
     volumes:
-      - mysql-data:/var/lib/mysql
+      - D:/mysql-data:/var/lib/mysql
       - ./mysql-init.sql:/docker-entrypoint-initdb.d/mysql-init.sql
-    network_mode: "host"
+    networks:
+      - donuts
+  phpmyadmin:
+    depends_on:
+      - db
+    image: phpmyadmin/phpmyadmin:latest
+    restart: always
+    ports:
+      - 8088:80
+    environment:
+      PMA_HOST: db
+    networks:
+      - donuts
 
   voyager_donuts:
     container_name: voyager_donuts
@@ -21,16 +33,20 @@ services:
       context: .
       dockerfile: Dockerfile
     image: voyager_donuts
-    network_mode: "host"
+    environment:
+      DB_HOST: db
     volumes:
-      - c:/Users/itelescope/Dropbox/MoanaSSO/DonutsCalibration:/voyager_calibration
-      - c:/Users/itelescope/Dropbox/MoanaSSO/DonutsLog:/voyager_log
-      - c:/Users/itelescope/Dropbox/MoanaSSO:/voyager_data
-      - c:/Users/itelescope/Dropbox/MoanaSSO/DonutsReference:/voyager_reference
-
-volumes:
-  mysql-data:
+      - D:/DonutsCalibration:/voyager_calibration
+      - D:/DonutsLog:/voyager_log
+      - D:/Voyager:/voyager_data
+      - D:/DonutsReference:/voyager_reference
+      - D:/donuts:/donuts
+    networks:
+      - donuts
 
 secrets:
   mysql_root:
     file: ./secrets/mysql_root
+
+networks:
+  donuts:

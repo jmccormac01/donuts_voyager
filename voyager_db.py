@@ -6,21 +6,24 @@ from datetime import datetime
 from contextlib import contextmanager
 import logging
 import pymysql
+import os
+
 
 @contextmanager
-def db_cursor(host='127.0.0.1', port=3306, user='donuts',
+def db_cursor(host=os.environ['DB_HOST'], port=3306, user='donuts',
               password='', db='donuts'):
     """
     Grab a database cursor
     """
-    with pymysql.connect(host=host, \
-                         port=port, \
-                         user=user, \
-                         password=password, \
+    with pymysql.connect(host=host,
+                         port=port,
+                         user=user,
+                         password=password,
                          db=db) as conn:
         with conn.cursor() as cur:
             yield cur
         conn.commit()
+
 
 def get_reference_image_path(field, filt, xbin, ybin):
     """
@@ -73,6 +76,7 @@ def get_reference_image_path(field, filt, xbin, ybin):
         ref_image = result[0]
     return ref_image
 
+
 def set_reference_image(ref_image_path, field, filt, xbin, ybin):
     """
     Set a new image as a reference in the database
@@ -110,6 +114,7 @@ def set_reference_image(ref_image_path, field, filt, xbin, ybin):
         logging.debug(f"DB: {qry}")
         logging.debug(f"DB: {qry_args}")
 
+
 def log_shifts_to_db(qry_args):
     """
     Log the autguiding information to the database
@@ -141,3 +146,17 @@ def log_shifts_to_db(qry_args):
         cur.execute(qry, qry_args)
         logging.debug(f"DB: {qry}")
         logging.debug(f"DB: {qry_args}")
+
+
+def print_last_log():
+    qry = """
+                SELECT *
+                FROM autoguider_log
+                ORDER BY updated DESC
+                LIMIT 1
+                """
+
+    with db_cursor() as cur:
+        cur.execute(qry)
+        result = cur.fetchone()
+        print(result)
