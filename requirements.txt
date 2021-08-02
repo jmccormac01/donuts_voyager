@@ -1,5 +1,5 @@
-numpy>=1.20.1
+numpy~=1.18.5
 donuts>=0.2.4
-astropy>=4.2
+astropy~=4.0.1.post1
 pymysql>=0.9.3
-toml>=0.10.0
+tomlkit~=0.7.2

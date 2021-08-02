@@ -6,7 +6,7 @@ from datetime import (
     date,
     timedelta,
     datetime)
-import toml
+from tomlkit import parse, dumps
 
 
 def load_config(filename):
@@ -27,7 +27,35 @@ def load_config(filename):
     ------
     None
     """
-    return toml.load(filename)
+
+    f = open(filename, "r")
+    data = f.read()
+    f.close()
+    return parse(data)
+
+
+def save_config(data, filename):
+    """
+    Load the config file
+
+    Parameters
+    ----------
+    data : basestring
+        data of the configuration
+
+    filename : string
+        Name of the configuration file to load
+
+    Returns
+    -------
+
+    Raises
+    ------
+    None
+    """
+    f = open(filename, "w")
+    f.write(dumps(data))
+    f.close()
 
 
 # get evening or morning
