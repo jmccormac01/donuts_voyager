@@ -8,6 +8,7 @@ from datetime import (
     datetime)
 import toml
 
+
 def load_config(filename):
     """
     Load the config file
@@ -27,6 +28,7 @@ def load_config(filename):
     None
     """
     return toml.load(filename)
+
 
 # get evening or morning
 def get_am_or_pm():
@@ -62,6 +64,7 @@ def get_am_or_pm():
         token = 1
     return token
 
+
 def get_tonight():
     """
     Get tonight's date in YYYY-MM-DD format
@@ -70,6 +73,7 @@ def get_tonight():
     d = date.today()-timedelta(days=token)
     night = "{:d}-{:02d}-{:02d}".format(d.year, d.month, d.day)
     return night
+
 
 # get tonights directory
 def get_data_dir(root_dir, windows=True):
