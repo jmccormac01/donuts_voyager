@@ -3,3 +3,5 @@ secrets/*
 .idea/*
 .vscode/*
 configs/config.toml
+configs/tes.toml
+tes.py
