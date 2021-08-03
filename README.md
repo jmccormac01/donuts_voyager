@@ -45,6 +45,14 @@ This command will fire up the following:
       1. Users familiar with MySQL can log in as the user ```donuts``` to database ```donuts``` without a password
       1. You can also log in as user ```root``` using the password specified during installation.
 
+# Voyager Configuration
+
+   1. Make sure Voyager Application Server is turned on (SetupForm >> Voyager Tab >> Activate On Start (checked)).
+   2. Set Voyager Path according to configs/configs.toml file (SetupForm >> Voyager Tab >> Path & File >> Sequence Path).
+   3. Set Voyager Sequence Pattern (SetupForm >> Voyager Tab >> Path & File >> Sequence File Pattern >> Manage)
+      ```$$VOYDATEFOLDER08$$\$$TARGETNAME$$_$$IMAGETYPE$$_$$FILTER$$_$$LABEL$$_$$EXPOSURETIME$$s_BIN$$BINNING$$_$$SENSORTEMP$$C_A$$ARRAYNODE$$_$$FRAMENR$$_$$VOYDATETIME$$_$$READOUTMODE$$_$$SPEED$$_RPA$$ROTATORPA$$_$$PIERSIDE$$_F$$ROBOFIREFOCUSERPOS$$```
+   4. Set Sequence Sub Folder (Sequence Configuration >> Sequence Tab >> Sequence Sub Foldering/File Naming) to Use File Pattern.
+
 # Contributors
 
 James McCormac
