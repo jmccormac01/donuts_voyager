@@ -1,6 +1,8 @@
 """
 Test script for guiding Voyager with donuts
 """
+import glob
+import os
 import sys
 import socket as s
 import traceback
@@ -1254,6 +1256,7 @@ class Voyager:
         ------
         None
         """
+
         # set up objects to hold calib info
         self._direction_store = defaultdict(list)
         self._scale_store = defaultdict(list)
@@ -1261,7 +1264,10 @@ class Voyager:
         # set up calibration directory
         self._calibration_dir = vutils.get_data_dir(self.calibration_root, windows=False)
 
-        # point the telescope to 1h west of the meridian
+        # delete old calibration files
+        files = glob.glob(self._calibration_dir+"/*.FIT")
+        for f in files:
+            os.remove(f)
 
         # get the reference filename
         filename_cont = self.__calibration_filename("R", 0)
@@ -1349,7 +1355,9 @@ class Voyager:
             elif config["guide_directions"]["-y"] == direc:
                 config["pixels_to_time"]["-y"] = ratio
 
-        vutils.save_config(config, 'configs/tes.toml')
+        vutils.save_config(config, 'configs/config.toml')
+        self.pixels_to_time = config['pixels_to_time']
+        self.guide_directions = config['guide_directions']
 
         # print out the storage areas for reference in case some bad measurements were made
         for direc in self._direction_store:
