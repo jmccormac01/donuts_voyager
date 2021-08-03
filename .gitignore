@@ -2,3 +2,4 @@ __pycache__
 secrets/*
 .idea/*
 .vscode/*
+configs/config.toml

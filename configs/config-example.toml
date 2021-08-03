@@ -3,13 +3,13 @@
 ######################################
 
 # telescope host name
-host = "Gavin-Telescope"
+host = "BRT"
 
 # host machine data paths, ensure these folders exist
-calibration_root_host = "C:\\Users\\itelescope\\Dropbox\\MoanaSSO\\DonutsCalibration"
-logging_root_host = "C:\\Users\\itelescope\\Dropbox\\MoanaSSO\\DonutsLog"
-data_root_host = "C:\\Users\\itelescope\\Dropbox\\MoanaSSO"
-reference_root_host = "C:\\Users\\itelescope\\Dropbox\\MoanaSSO\\DonutsReference"
+calibration_root_host = "D:\\DonutsCalibration"
+logging_root_host = "D:\\DonutsLog"
+data_root_host = "D:\\Voyager"
+reference_root_host = "D:\\DonutsReference"
 
 # fits image characteristics
 image_extension = ".FIT"
@@ -34,9 +34,9 @@ donuts_subtract_bkg = true
 #########################################
 
 # guiding characteristics
-ra_axis = "y"
-pixels_to_time = {"+x" = 62.54, "-x" = 62.13, "+y" = 61.95, "-y" = 62.09}
-guide_directions = {"+y" = 2, "-y" = 3, "+x" = 1, "-x" = 0}
+ra_axis = "x"
+pixels_to_time = {"+x" = 50.77681407205617, "-x" = 51.16491621163948, "+y" = 48.336951147849554, "-y" = 48.55210916579291}
+guide_directions = {"+y" = 1, "-y" = 0, "+x" = 3, "-x" = 2}
 
 ######################################################
 # DO NOT CHANGE INFO BELOW HERE UNLESS INSTRUCTED TO #
@@ -54,7 +54,7 @@ reference_root = "/voyager_reference"
 
 # calibration setup
 calibration_step_size_ms = 5000
-calibration_n_iterations = 5
+calibration_n_iterations = 2
 calibration_exptime = 20
 
 # guiding PID/stats setup
