@@ -6,7 +6,8 @@ from datetime import (
     date,
     timedelta,
     datetime)
-import toml
+from tomlkit import parse, dumps
+
 
 def load_config(filename):
     """
@@ -26,7 +27,36 @@ def load_config(filename):
     ------
     None
     """
-    return toml.load(filename)
+
+    f = open(filename, "r")
+    data = f.read()
+    f.close()
+    return parse(data)
+
+
+def save_config(data, filename):
+    """
+    Load the config file
+
+    Parameters
+    ----------
+    data : basestring
+        data of the configuration
+
+    filename : string
+        Name of the configuration file to load
+
+    Returns
+    -------
+
+    Raises
+    ------
+    None
+    """
+    f = open(filename, "w")
+    f.write(dumps(data))
+    f.close()
+
 
 # get evening or morning
 def get_am_or_pm():
@@ -62,6 +92,7 @@ def get_am_or_pm():
         token = 1
     return token
 
+
 def get_tonight():
     """
     Get tonight's date in YYYY-MM-DD format
@@ -70,6 +101,7 @@ def get_tonight():
     d = date.today()-timedelta(days=token)
     night = "{:d}-{:02d}-{:02d}".format(d.year, d.month, d.day)
     return night
+
 
 # get tonights directory
 def get_data_dir(root_dir, windows=True):
