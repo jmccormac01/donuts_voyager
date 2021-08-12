@@ -574,9 +574,18 @@ class Voyager():
                             host_path = rec[self._voyager_path_keyword]
                             last_image = self.__resolve_container_path("data", host_path)
 
+                            # TODO remove after debugging:
+                            logging.debug(f"DEBUG: HOST PATH: {host_path}")
+                            logging.debug(f"DEBUG: LAST IMAGE: {last_image}")
+
                             # set the latest image and notify the guide loop thread to wake up
                             with self._guide_condition:
+                                # TODO remove
+                                #logging.debug(f"DEBUG: ")
+                                logging.debug(f"DEBUG: setting _latest_guide_frame to {last_image}")
                                 self._latest_guide_frame = last_image
+                                # TODO remove
+                                logging.debug("DEBUG: Notifying guide_loop...")
                                 self._guide_condition.notify()
 
                             # fetch the results from the queue
@@ -676,19 +685,33 @@ class Voyager():
         None
         """
         while 1:
+            # TODO remove
+            logging.debug(f"DEBUG: in __guide_loop")
             # end on ctrl+c
             if EXIT_EVENT.set():
+                # TODO remove
+                logging.debug(f"DEBUG: in __guide_loop @ EXIT_EVENT.set() - BREAKING")
                 break
 
             # block until a frame is available for processing
             with self._guide_condition:
+                # TODO remove
+                logging.debug(f"DEBUG: in __guide_loop @ with _guide_condition")
                 while self._latest_guide_frame is None:
+                    # TODO remove
+                    logging.debug(f"DEBUG: in __guide_loop @ with _guide_condition @ while _lastest_guide_frame is None - WAITING")
                     self._guide_condition.wait()
 
+                # TODO remove
+                logging.debug(f"DEBUG: in __guide_loop @ after _guide_condition.wait()")
                 last_image = self._latest_guide_frame
+                # TODO remove
+                logging.debug(f"DEBUG: in __guide_loop - Last image = {last_image}")
 
                 # check if we're still observing the same field
                 # pylint: disable=no-member
+                # TODO remove
+                logging.debug(f"DEBUG: in __guide_loop - Trying to open {last_image}")
                 with fits.open(last_image) as ff:
                     # current field and filter?
                     current_filter = ff[0].header[self.filter_keyword]
@@ -697,8 +720,15 @@ class Voyager():
                     current_ybin = ff[0].header[self.ybin_keyword]
                     declination = ff[0].header[self.dec_keyword]
                     self._declination = self.__dec_str_to_deg(declination)
+                    # TODO remove
+                    logging.debug(f"DEBUG: in __guide_loop - {current_filter} {current_field} {current_xbin} {current_ybin} {declination} {self._declination}")
                 # pylint: enable=no-member
 
+                # TODO remove
+                logging.debug(f"DEBUG: in __guide_loop - Last image {last_image} - Headers should be loaded")
+
+                # TODO remove
+                logging.debug(f"DEBUG: in __guide_loop - Checking for new field etc")
                 # if something changes or we haven't started yet, sort out a reference image
                 if current_field != self._last_field or current_filter != self._last_filter or \
                     current_xbin != self._last_xbin or current_ybin != self._last_ybin or self._donuts_ref is None:
@@ -761,6 +791,9 @@ class Voyager():
 
                 # set this to None for the next image
                 self._latest_guide_frame = None
+
+            # TODO remove
+            time.sleep(1)
 
 
     def __open_socket(self):
