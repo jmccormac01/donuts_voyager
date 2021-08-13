@@ -847,7 +847,7 @@ class Voyager():
 
         return sent
 
-    def __receive(self, n_bytes=1024):
+    def __receive(self, n_bytes=2048):
         """
         Receive a message of n_bytes in length from Voyager
 
@@ -855,7 +855,7 @@ class Voyager():
         ----------
         n_bytes : int, optional
             Number of bytes to read from socket
-            default = 1024
+            default = 2048
 
         Returns
         -------
@@ -866,11 +866,30 @@ class Voyager():
         ------
         None
         """
+        # NOTE original code, we have JSON decoding errors, trying to figure it out
+        #try:
+        #    message = json.loads(self.socket.recv(n_bytes))
+        #except s.timeout:
+        #    message = {}
+        #return message
+
+        # load the raw string
         try:
-            message = json.loads(self.socket.recv(n_bytes))
+            message_raw = self.socket.recv(n_bytes)
         except s.timeout:
+            message_raw = ""
+
+        # spit out the raw message
+        logging.debug(f"__recieve: message_raw={message_raw}")
+
+        # unpack it into a json object
+        if message_raw != "":
+            message = json.loads(message_raw)
+        else:
             message = {}
+
         return message
+
 
     def __keep_socket_alive(self):
         """
