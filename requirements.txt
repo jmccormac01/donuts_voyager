@@ -1,5 +1,5 @@
 numpy>=1.20.1
-donuts>=0.2.4
+donuts==0.3.2
 astropy>=4.2
 pymysql>=0.9.3
 toml>=0.10.0
