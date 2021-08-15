@@ -884,7 +884,11 @@ class Voyager():
 
         # unpack it into a json object
         if message_raw != "":
-            message = json.loads(message_raw)
+            # NOTE sometimes a message is truncated, try to stop it crashing...
+            try:
+                message = json.loads(message_raw)
+            except json.decoder.JSONDecodeError:
+                message = {}
         else:
             message = {}
 
