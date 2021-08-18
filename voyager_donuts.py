@@ -318,6 +318,9 @@ class Voyager():
         # add a message object for sharing between methods
         self._msg = Message()
 
+        # create an overflow for message receiving, not sure if needed, but added just in case
+        self.message_overflow = []
+
         # some internal tracking variables
         self._image_id = 0
         self._comms_id = 0
@@ -534,7 +537,7 @@ class Voyager():
                 break
 
             # listen for a response or a new job to do
-            rec = self.__receive()
+            rec = self.__receive_until_delim()
 
             # was there a command? If so, do something, else, do nothing/keep alive
             if rec:
@@ -880,7 +883,7 @@ class Voyager():
             message_raw = ""
 
         # spit out the raw message
-        logging.debug(f"__recieve: message_raw={message_raw}")
+        logging.debug(f"__receive: message_raw={message_raw}")
 
         # unpack it into a json object
         if message_raw != "":
@@ -894,6 +897,51 @@ class Voyager():
 
         return message
 
+    def __receive_until_delim(self, delim=b'\r\n'):
+        """
+        """
+        message_buffer = []
+        n_bytes = 2048
+
+        # check if there is any overflow from last time
+        logging.debug(f"Message overflow {self.message_overflow}")
+        for msg in self.message_overflow:
+            logging.debug(f"Moving {msg} to __receive_until_delim message_buffer...")
+            message_buffer.append(msg)
+
+        # reset the overflow
+        self.message_overflow = []
+        logging.debug(f"Reset message overflow to {self.message_overflow}")
+
+        continue_reading = True
+        logging.info("Starting read until delim...")
+        while continue_reading:
+            try:
+                message_raw = self.socket.recv(n_bytes)
+            except s.timeout:
+                message_raw = b''
+            logging.debug(f"Message raw {message_raw}")
+
+            if delim in message_raw:
+                logging.debug("DELIM FOUND...")
+                continue_reading = False
+                message_end, message_new_start = message_raw.split(b'\r\n')
+                logging.debug(f"Message raw parts {message_end} : {message_new_start}")
+                message_buffer.append(message_end)
+                logging.debug(f"Message buffer: {message_buffer}")
+                self.message_overflow.append(message_new_start)
+                logging.debug(f"Message overflow: {self.message_overflow}")
+
+            else:
+                logging.debug("DELIM NOT FOUND, CONTINUING READING...")
+                continue_reading = True
+                message_buffer.append(message_raw)
+                logging.debug(f"Message buffer: {message_buffer}")
+
+        logging.info("Done reading until delim...")
+        message_str = b''.join(message_buffer)
+        logging.info(f"Final message string: {message_str}")
+        return json.loads(message_str)
 
     def __keep_socket_alive(self):
         """
@@ -1106,7 +1154,7 @@ class Voyager():
 
 
                 logging.debug(f"JSONRPC CALLBACK LOOP [{cb_loop_count+1}]: {uid}:{idd}")
-                rec = self.__receive()
+                rec = self.__receive_until_delim()
 
                 # handle the jsonrpc response (1 of 2 responses needed)
                 if "jsonrpc" in rec.keys():
@@ -1137,7 +1185,7 @@ class Voyager():
             # we got a jsonrpc response to the pulse guide command
             # here we start listening for it being done
             logging.debug(f"EVENT CALLBACK LOOP [{cb_loop_count+1}]: {uid}:{idd}")
-            rec = self.__receive()
+            rec = self.__receive_until_delim()
 
             # handle the RemoteActionResult response (2 of 2 needed)
             if "Event" in rec.keys():
