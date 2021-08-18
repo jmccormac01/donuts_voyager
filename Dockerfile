@@ -6,6 +6,10 @@ ENV TINI_VERSION="v0.19.0"
 ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
 RUN chmod +x /tini
 
+# set the timezone for the current installation
+RUN echo "Australia/NSW" > /etc/timezone
+RUN dpkg-reconfigure -f noninteractive tzdata
+
 # keep setup tools up to date
 RUN pip install -U \
     pip \
