@@ -145,7 +145,10 @@ class Voyager():
 
         continue_reading = True
         while continue_reading:
-            message_raw = self.socket.recv(n_bytes)
+            try:
+                message_raw = self.socket.recv(n_bytes)
+            except s.timeout:
+                message_raw = ""
             print(f"Message raw {message_raw}")
 
             if delim in message_raw:
