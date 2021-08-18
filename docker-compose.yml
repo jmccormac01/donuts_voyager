@@ -22,6 +22,8 @@ services:
       dockerfile: Dockerfile
     image: voyager_donuts
     network_mode: "host"
+    environment:
+      TZ: "Australia/NSW"
     volumes:
       - c:/Users/itelescope/Dropbox/MoanaSSO/DonutsCalibration:/voyager_calibration
       - c:/Users/itelescope/Dropbox/MoanaSSO/DonutsLog:/voyager_log
