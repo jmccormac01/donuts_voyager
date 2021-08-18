@@ -26,6 +26,9 @@ class Voyager():
         self.inst = 1
         self.message_overflow = []
 
+        # test the new receive_until method
+        self.establish_and_maintain_voyager_connection()
+
     def establish_and_maintain_voyager_connection(self):
         """
         Open a connection and maintain it with Voyager
@@ -40,7 +43,7 @@ class Voyager():
                 print(f"SENT: {polling_str}")
 
             # listen for a response
-            rec = self.__receive()
+            rec = self.__receive_until(delim=b'\r\n')
             if rec:
                 print(f"RECEIVED: {rec}")
 
