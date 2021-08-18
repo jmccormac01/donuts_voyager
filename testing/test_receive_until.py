@@ -54,8 +54,7 @@ class Voyager():
         Open a connection to Voyager
         """
         self.socket = s.socket(s.AF_INET, s.SOCK_STREAM)
-        #self.socket.settimeout(2.0)
-        self.socket.settimeout(0)
+        self.socket.settimeout(1.0)
         try:
             self.socket.connect((self.socket_ip, self.socket_port))
         except s.error:
