@@ -26,9 +26,9 @@ Docker depends on the Windows Subsystem for Linux (WSL2.0) and this is only avai
       1. This root password file should not be commited to any git repository.
       1. Anything in the ```secrets/``` folder is automatically excluded from version control in the ```.gitignore``` file
       1. Once you've memorised the root password and have built donuts (see below) and ran it a few times (see further below), you should delete the ```secrets/mysql_root``` file.
-   1. Finally, edit the ```Dockerfile``` timezone information so the container has the correct local time configured:
-      1. Edit the line ```RUN echo "Australia/NSW" > /etc/timezone```
-      1. Replace ```Australia/NSW``` with your local timezone.
+   1. Finally, edit the ```docker-compose.yml``` file timezone information so the container has the correct local time configured:
+      1. Edit the lines ```TZ: "<TIMEZONE>"``` to set your local timezone.
+      1. Note there is a ```TZ:``` for each container (```db``` and ```voyager_donuts```)
    1. Build the Docker image for Donuts/Voyager
       1. ```docker build -t voyager_donuts .```
 
