@@ -7,17 +7,37 @@ Initial scribbles to have an event driven version of donuts
 To simplify the installation process of Donuts and MySQL, everything is containerised using Docker.
 Docker depends on the Windows Subsystem for Linux (WSL2.0) and this is only available on Windows 10.
 
-   1. Install/enable WSL2.0 - Add link to notes
+   1. Install WSL2.0
+      1. Open powershell as admin
+      1. Run ```wsl --install -d Ubuntu```
+      1. Enter a default username/password when prompted for the Ubuntu installation. For simplicity, copying the windows credentials is advisable.
+      1. Once installed, restart the PC
    1. Install Docker desktop on your control PC
    1. Install Github desktop on youe control PC
-   1. Clone the Donuts/Voyager git repository
-      1. ```cd /path/where/donuts/will/live```
-      1. ```git clone https://github.com/jmccormac01/donuts_voyager.git```
-      1. ```cd donuts_voyager```
+   1. Clone the ```donuts_voyager``` git repository
+      1. The repository can be found at ```https://github.com/jmccormac01/donuts_voyager```
+      1. Where you store the git repository is important, as some files in the repo will need editing to point to this location (see below)
+   1. Inside the ```voyager_donuts``` repository we need to edit several files as part of the installation.
    1. Edit the ```docker-compose.yml``` file to set the following information for your system:
-      1. On line 16 replace the ```/Users/jmcc/Dropbox/Docker/mysql``` section of the line (before the :) with the path to where you'd like to store the database contents
-      1. Ensure that folder exists before continuing
-   1. For security reasons, the MySQL database root password is not stored on github. Do the following to set a root password:
+      1. Volume paths in the ```docker-compose.yml``` have the format ```<host_path>:<container_path>```
+      1. The ```db``` container paths should be fine as their default values
+      1. You should ensure that the host paths configured in the ```voyager_donuts``` container exist and are correct:
+         1. There are 4 paths that must be configured, they are discussed in turn below:
+         1. Host path to ```voyager_calibration```. This folder is used to store data for the calibration of donuts
+         1. Host path to ```voyager_log```. This folder contains logs from donuts if logging to disc is enabled
+         1. Host path to ```voyager_data```. This folder contains nightly data files. Data for a given night is assumed to be in a folder titled ```YYYY-MM-DD``` within this folder
+         1. Host path to ```voyager_reference```. This folder stores the reference images for long term guiding stability.
+      1. Edit the ```docker-compose.yml``` file timezone information so the container has the correct local time configured:
+         1. Edit the lines ```TZ: "<TIMEZONE>"``` to set your local timezone.
+         1. Note there is a ```TZ:``` for each container (```db``` and ```voyager_donuts```)
+         1. Names of timezones can be found [here](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) in the ```TZ database name``` column
+   1. Similarly, edit the ```Dockerfile``` timezone section to match the timezone entered in the ```docker-compose.yml``` file.
+   1. In order to start and stop donuts from Voyager automatically, do the following:
+      1. Edit the ```start.bat``` and ```stop.bat``` scripts
+      1. Enter the path to the ```donuts_voyager``` repository on line 1 of each script
+      1. In Voyager's drag script interface, you can add a call to external scripts to point at ```start.bat``` and ```stop.bat``` at the beginning and end of an observing sequence, respectively
+   1. Setting the MySQL root password:
+      1. For security reasons, the MySQL database root password is not stored on github. Do the following to set a root password:
       1. ```cd /path/where/donuts/lives```
       1. ```mkdir secrets/```
       1. ```cd secrets/```
@@ -26,27 +46,19 @@ Docker depends on the Windows Subsystem for Linux (WSL2.0) and this is only avai
       1. This root password file should not be commited to any git repository.
       1. Anything in the ```secrets/``` folder is automatically excluded from version control in the ```.gitignore``` file
       1. Once you've memorised the root password and have built donuts (see below) and ran it a few times (see further below), you should delete the ```secrets/mysql_root``` file.
-   1. Finally, edit the ```docker-compose.yml``` file timezone information so the container has the correct local time configured:
-      1. Edit the lines ```TZ: "<TIMEZONE>"``` to set your local timezone.
-      1. Note there is a ```TZ:``` for each container (```db``` and ```voyager_donuts```)
    1. Build the Docker image for Donuts/Voyager
       1. ```docker build -t voyager_donuts .```
 
-# Running Donuts
+# Running Donuts Automatically
 
-Eventually I'll get round to making Voyager run the Donuts Docker container but for now
-during the testing phase we need to run the container manually using:
+Voyager can start and stop donuts by calling the ```start.bat``` and ```stop.bat``` scripts that we configured in the Installation section above. This is done by:
 
-   1. ```cd /path/where/donuts/lives```
-   1. ```docker compose up```
+   1. Add a call to an external script before an observing sequence. Point the external call at the ```start.bat``` script inside the ```donuts_voyager``` repository
+   1. To automatically stop donuts after an observing sequence, add an external script call after the observing block. Point the external call at the ```stop.bat``` script in the ```donuts_voyager``` repository
 
-This command will fire up the following:
+# Manually Running Donuts
 
-   1. The container inside which Donuts will run and interact with Voyager
-   1. The MySQL database container
-   1. The adminer container which allows interaction with the database via a browser on url ```localhost:8080```
-      1. Users familiar with MySQL can log in as the user ```donuts``` to database ```donuts``` without a password
-      1. You can also log in as user ```root``` using the password specified during installation.
+You can manually start and stop donuts by simply double clicking the ```start.bat``` and ```stop.bat``` in the ```donuts_voyager``` repository
 
 # Contributors
 
