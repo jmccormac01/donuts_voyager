@@ -18,6 +18,14 @@ Docker depends on the Windows Subsystem for Linux (WSL2.0) and this is only avai
       1. The repository can be found at ```https://github.com/jmccormac01/donuts_voyager```
       1. Where you store the git repository is important, as some files in the repo will need editing to point to this location (see below)
    1. Inside the ```voyager_donuts``` repository we need to edit several files as part of the installation.
+   1. There are two config directories, one with Docker config (```docker_configs```) and one with Donuts config (```donuts_config```), let's start by editing the Docker config for a new system:
+   1. Copy the following files from the ```docker_configs``` folder up one level into the main ```voyager_donuts``` folder:
+      1. From the ```voyager_donuts``` folder run:
+      1. ```cp docker_configs/Dockerfile_example Dockerfile```
+      1. ```cp docker_configs/docker-compose_example.yml docker-compose.yml```
+      1. ```cp docker_configs/start_example.bat start.bat```
+      1. ```cp docker_configs/stop_example.bat stop.bat```
+      1. Each of these files will need editing for new installations
    1. Edit the ```docker-compose.yml``` file to set the following information for your system:
       1. Volume paths in the ```docker-compose.yml``` have the format ```<host_path>:<container_path>```
       1. The ```db``` container paths should be fine as their default values
@@ -31,7 +39,9 @@ Docker depends on the Windows Subsystem for Linux (WSL2.0) and this is only avai
          1. Edit the lines ```TZ: "<TIMEZONE>"``` to set your local timezone.
          1. Note there is a ```TZ:``` for each container (```db``` and ```voyager_donuts```)
          1. Names of timezones can be found [here](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) in the ```TZ database name``` column
-   1. Similarly, edit the ```Dockerfile``` timezone section to match the timezone entered in the ```docker-compose.yml``` file.
+   1. Edit the ```Dockerfile``` and set the following for your system:
+      1. Make the timezone section to match the timezone entered in the ```docker-compose.yml``` file.
+      1. In the final line set the path to the correct Donuts config file in the ```donuts_configs``` folder
    1. In order to start and stop donuts from Voyager automatically, do the following:
       1. Edit the ```start.bat``` and ```stop.bat``` scripts
       1. Enter the path to the ```donuts_voyager``` repository on line 1 of each script
@@ -46,6 +56,10 @@ Docker depends on the Windows Subsystem for Linux (WSL2.0) and this is only avai
       1. This root password file should not be commited to any git repository.
       1. Anything in the ```secrets/``` folder is automatically excluded from version control in the ```.gitignore``` file
       1. Once you've memorised the root password and have built donuts (see below) and ran it a few times (see further below), you should delete the ```secrets/mysql_root``` file.
+   1. Next we need to edit the donuts config file for our new system:
+      1. Copy the ```example.toml``` file and edit the top section to set the paths to the data and FITS keywords etc
+      1. Ensure that the final line of the ```Dockerfile``` is pointed at this new config file
+      1. The calibration values in the middle section will be set after the initial on-sky calibration run
    1. Build the Docker image for Donuts/Voyager
       1. ```docker build -t voyager_donuts .```
 
