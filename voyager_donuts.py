@@ -11,6 +11,7 @@ import queue
 import json
 import uuid
 import signal
+import argparse as ap
 from shutil import copyfile
 from collections import defaultdict
 import numpy as np
@@ -33,6 +34,15 @@ from PID import PID
 # pylint: disable=too-many-lines
 # pylint: disable=too-many-instance-attributes
 # pylint: disable=broad-except
+
+def arg_parse():
+    """
+    Parse the command line arguments
+    """
+    p = ap.ArgumentParser()
+    p.add_argument('config',
+                   help='path to config file')
+    return p.parse_args()
 
 # set this when ctrl+c happens, then exit cleanly
 EXIT_EVENT = threading.Event()
@@ -1725,11 +1735,14 @@ def signal_handler(signum, frame):
 
 
 if __name__ == "__main__":
+    # parse the command line arguments
+    args = arg_parse()
+
     # handle ctrl+c
     signal.signal(signal.SIGINT, signal_handler)
 
     # load the config file
-    config = vutils.load_config('configs/config.toml')
+    config = vutils.load_config(args.config)
 
     # get the logging level:
     if config['logging_level'] == 'debug':
