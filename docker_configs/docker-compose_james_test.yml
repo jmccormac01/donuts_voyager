@@ -1,0 +1,39 @@
+version: '3.1'
+
+services:
+  db:
+    image: mysql:8.0.25
+    container_name: db
+    restart: always
+    secrets:
+      - mysql_root
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root
+      MYSQL_DATABASE: donuts
+      TZ: "Europe/London"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql-init.sql:/docker-entrypoint-initdb.d/mysql-init.sql
+    network_mode: "host"
+
+  voyager_donuts:
+    container_name: voyager_donuts
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: voyager_donuts
+    network_mode: "host"
+    environment:
+      TZ: "Europe/London"
+    volumes:
+      - //192.168.1.145/jmcc/Public/DonutsCalibration:/voyager_calibration
+      - //192.168.1.145/jmcc/Public/DonutsLog:/voyager_log
+      - //192.168.1.145/jmcc/Public:/voyager_data
+      - //192.168.1.145/jmcc/Public/DonutsReference:/voyager_reference
+
+volumes:
+  mysql-data:
+
+secrets:
+  mysql_root:
+    file: ./secrets/mysql_root

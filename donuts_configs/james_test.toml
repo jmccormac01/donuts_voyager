@@ -1,0 +1,72 @@
+######################################
+# Basic telescope setup. Change here #
+######################################
+
+# telescope host name
+host = "DESKTOP-CNTF3JR"
+
+# host machine data paths, ensure these folders exist
+calibration_root_host = "\\192.168.1.145\jmcc\Public\DonutsCalibration"
+logging_root_host = "\\192.168.1.145\jmcc\Public\DonutsLog"
+data_root_host = "\\192.168.1.145\jmcc\Public"
+reference_root_host = "\\192.168.1.145\jmcc\Public\DonutsReference"
+
+# fits image characteristics
+image_extension = ".FIT"
+filter_keyword = "FILTER"
+field_keyword = "OBJECT"
+ra_keyword = "OBJCTRA"
+dec_keyword = "OBJCTDEC"
+xbin_keyword = "XBINNING"
+ybin_keyword = "YBINNING"
+
+# logging info
+# level of logging detail, choices: "info" or "debug"
+logging_level = "debug"
+# location of log output, choices: "file" or "stdout"
+logging_location = "stdout"
+
+# donuts algorithm info
+donuts_subtract_bkg = true
+
+#########################################
+# Change this section after calibration #
+#########################################
+
+# guiding characteristics
+ra_axis = "y"
+pixels_to_time = {"+x" = 92.98, "-x" = 94.49, "+y" = 93.65, "-y" = 92.57}
+guide_directions = {"+y" = 3, "-y" = 2, "+x" = 1, "-x" = 0}
+
+######################################################
+# DO NOT CHANGE INFO BELOW HERE UNLESS INSTRUCTED TO #
+######################################################
+
+# voyager info
+socket_ip = "host.docker.internal"
+socket_port = 5950
+
+# docker data paths
+calibration_root = "/voyager_calibration"
+logging_root = "/voyager_log"
+data_root = "/voyager_data"
+reference_root = "/voyager_reference"
+
+# calibration setup
+calibration_step_size_ms = 5000
+calibration_n_iterations = 5
+calibration_exptime = 20
+
+# guiding PID/stats setup
+guide_buffer_length = 20
+guide_buffer_sigma = 10
+max_error_pixels = 20
+n_images_to_stabilise = 10
+pid_coeffs.x.p=0.75
+pid_coeffs.x.i=0.02
+pid_coeffs.x.d=0.0
+pid_coeffs.y.p=0.7
+pid_coeffs.y.i=0.02
+pid_coeffs.y.d=0.0
+pid_coeffs.set_x = 0.0
+pid_coeffs.set_y = 0.0
