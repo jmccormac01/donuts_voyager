@@ -22,9 +22,9 @@ ybin_keyword = "YBINNING"
 
 # logging info
 # level of logging detail, choices: "info" or "debug"
-logging_level = "debug"
+logging_level = "info"
 # location of log output, choices: "file" or "stdout"
-logging_location = "stdout"
+logging_location = "file"
 
 # donuts algorithm info
 donuts_subtract_bkg = true
