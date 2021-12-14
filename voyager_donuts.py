@@ -12,6 +12,7 @@ import json
 import uuid
 import signal
 import argparse as ap
+from datetime import datetime
 from shutil import copyfile
 from collections import defaultdict
 import numpy as np
@@ -353,6 +354,7 @@ class Voyager():
 
         # this calibration directory inside calibration root gets made if we calibrate
         self._calibration_dir = None
+        self._calibration_results_path = None
         self.calibration_step_size_ms = config['calibration_step_size_ms']
         self.calibration_n_iterations = config['calibration_n_iterations']
         self.calibration_exptime = config['calibration_exptime']
@@ -1306,6 +1308,29 @@ class Voyager():
             magnitude = abs(sy)
         return direction, magnitude
 
+    @staticmethod
+    def __append_to_file(path, line):
+        """
+        Take a line and append it to a file
+
+        Parameters
+        ----------
+        path : str
+            path to file to append to
+        line : str
+            line to append to file
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        None
+        """
+        with open(path, 'a') as of:
+            of.write(line)
+
     def __calibrate_donuts(self):
         """
         Run the calibration routine. Here we take and
@@ -1332,6 +1357,10 @@ class Voyager():
 
         # set up calibration directory
         self._calibration_dir = vutils.get_data_dir(self.calibration_root, windows=False)
+
+        # set up a calibration output filename in that directory
+        tnow = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S')
+        self._calibration_results_path = f"{self._calibration_dir}/donuts_calibration_{tnow}.txt"
 
         # point the telescope to 1h west of the meridian
 
@@ -1398,10 +1427,23 @@ class Voyager():
             if len(set(self._direction_store[direc])) != 1:
                 logging.error(f"ERROR: PROBLEM WITH CALIBRATED DIRECTION {self._direction_store[direc]}")
             logging.info(f"{direc}: {self._direction_store[direc][0]}")
+
+            # write out the direction_store contents for easy finding
+            line = f"{direc} {self._direction_store[direc]}\n"
+            self.__append_to_file(self._calibration_results_path, line)
+
         # now work out the ms/pix scales from the calbration run above
         for direc in self._scale_store:
             ratio = self.calibration_step_size_ms/np.average(self._scale_store[direc])
             logging.info(f"{direc}: {ratio:.2f} ms/pixel")
+
+            # write out the scale_store contents for easy finding
+            line = f"{direc}: {self._scale_store[direc]}\n"
+            self.__append_to_file(self._calibration_results_path, line)
+
+            # write out the average correction too
+            line = f"{direc}: {ratio:.2f} ms/pixel\n"
+            self.__append_to_file(self._calibration_results_path, line)
 
         # print out the storage areas for reference in case some bad measurements were made
         for direc in self._direction_store:
