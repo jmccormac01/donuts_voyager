@@ -55,7 +55,7 @@ reference_root = "/voyager_reference"
 # calibration setup
 calibration_step_size_ms = 5000
 calibration_n_iterations = 5
-calibration_exptime = 20
+calibration_exptime = 10
 
 # guiding PID/stats setup
 guide_buffer_length = 20
