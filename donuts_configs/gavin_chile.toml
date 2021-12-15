@@ -35,7 +35,7 @@ donuts_subtract_bkg = true
 
 # guiding characteristics
 ra_axis = "y"
-pixels_to_time = {"+x" = 92.98, "-x" = 94.49, "+y" = 93.65, "-y" = 92.57}
+pixels_to_time = {"+x" = 107.0, "-x" = 107.0, "+y" = 107.0, "-y" = 107.0}
 guide_directions = {"+y" = 3, "-y" = 2, "+x" = 1, "-x" = 0}
 
 ######################################################
