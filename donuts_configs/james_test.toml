@@ -6,10 +6,10 @@
 host = "DESKTOP-CNTF3JR"
 
 # host machine data paths, ensure these folders exist
-calibration_root_host = "\\192.168.1.145\jmcc\Public\DonutsCalibration"
-logging_root_host = "\\192.168.1.145\jmcc\Public\DonutsLog"
-data_root_host = "\\192.168.1.145\jmcc\Public"
-reference_root_host = "\\192.168.1.145\jmcc\Public\DonutsReference"
+calibration_root_host = "C:\\User\\user\\Documents\\Voyager\\DonutsCalibration"
+logging_root_host = "C:\\User\\user\\Documents\\Voyager\\DonutsLog"
+data_root_host = "C:\\User\\user\\Documents\\Voyager\\DonutsData"
+reference_root_host = "C:\\User\\user\\Documents\\Voyager\\DonutsReference"
 
 # fits image characteristics
 image_extension = ".FIT"
@@ -27,7 +27,7 @@ logging_level = "debug"
 logging_location = "stdout"
 
 # donuts algorithm info
-donuts_subtract_bkg = true
+donuts_subtract_bkg = false
 
 #########################################
 # Change this section after calibration #
