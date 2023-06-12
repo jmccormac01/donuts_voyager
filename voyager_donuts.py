@@ -575,10 +575,13 @@ class Voyager():
             logging.fatal("Cannot determine if mount is GEM or Fork, quitting!")
             sys.exit(ERROR_MOUNT_TYPE)
         elif payload['FlipStatus'] == 4:
+            logging.info("Voyager reports mount as FORK, ignoring all pier flip logic")
             return False, FlipStatus.FORK
         elif payload['FlipStatus'] in (0, 1):
+            logging.info("Voyager reports mount as GEM, currently BEFORE flip")
             return True, FlipStatus.BEFORE
         elif payload['FlipStatus'] in (2, 3):
+            logging.info("Voyager reports mount as GEM, currently AFTER flip")
             return True, FlipStatus.AFTER
         else:
             logging.fatal("Got unhandled return from mount status")
@@ -803,6 +806,7 @@ class Voyager():
                 if current_field != self._last_field or current_filter != self._last_filter or \
                     current_xbin != self._last_xbin or current_ybin != self._last_ybin or \
                     current_flip_status != self._last_flip_status or self._donuts_ref is None:
+                    logging.info("Detected change in observing sequence, reinitialising donuts...")
                     # reset PID loop to unstabilised state
                     self.__initialise_pid_loop(stabilised=False)
                     # reset the guide buffer
@@ -833,6 +837,7 @@ class Voyager():
                     # make this image the reference, update the last field/filter also
                     self._donuts_ref = Donuts(self._ref_file, subtract_bkg=self.donuts_subtract_bkg)
                 else:
+                    logging.info("No change in observing sequence, donuts continuing as before...")
                     do_correction = True
 
                 # update the last field/filter values
