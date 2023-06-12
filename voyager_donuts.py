@@ -971,7 +971,7 @@ class Voyager():
         logging.debug(f"Reset message overflow to {self.message_overflow}")
 
         continue_reading = True
-        logging.info("Starting read until delim...")
+        logging.debug("Starting read until delim...")
         while continue_reading:
             try:
                 message_raw = self.socket.recv(n_bytes)
@@ -995,9 +995,9 @@ class Voyager():
                 message_buffer.append(message_raw)
                 logging.debug(f"Message buffer: {message_buffer}")
 
-        logging.info("Done reading until delim...")
+        logging.debug("Done reading until delim...")
         message_str = b''.join(message_buffer)
-        logging.info(f"Final message string: {message_str}")
+        logging.debug(f"Final message string: {message_str}")
         return json.loads(message_str)
 
     def __keep_socket_alive(self):
