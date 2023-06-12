@@ -827,9 +827,10 @@ class Voyager():
                         self._ref_file = last_image
                         ref_filename = self._ref_file.split('/')[-1]
                         # copy it to the special storage area
-                        copyfile(self._ref_file, f"{self.reference_root}/{ref_filename}")
+                        long_term_ref_file = f"{self.reference_root}/{ref_filename}"
+                        copyfile(self._ref_file, long_term_ref_file)
                         # set thw copied image to the reference in the database
-                        vdb.set_reference_image(self._ref_file, current_field, current_filter,
+                        vdb.set_reference_image(long_term_ref_file, current_field, current_filter,
                                                 current_xbin, current_ybin, current_flip_status)
                         # set skip correction as new reference was just defined as this current image
                         do_correction = False
