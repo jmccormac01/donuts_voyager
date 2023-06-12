@@ -36,6 +36,9 @@ from PID import PID
 # pylint: disable=too-many-instance-attributes
 # pylint: disable=broad-except
 
+# some error codes when exiting
+ERROR_SOCKET, ERROR_MOUNT_TYPE, ERROR_STABILISE, ERROR_UNHANDLED = np.arange(4)
+
 def arg_parse():
     """
     Parse the command line arguments
@@ -53,6 +56,18 @@ class DonutsStatus():
     Current status of Donuts guiding
     """
     CALIBRATING, GUIDING, IDLE, UNKNOWN = np.arange(4)
+
+class FlipStatus():
+    """
+    FlipStatus flags from Voyager
+    0 & 1 are from BEFORE flipping
+    2 is during flip, 3 is after, so 2 & 3 are considered AFTER
+    4 is for a FORK (ignore all flipping logic)
+    5 is an error
+
+    We remap these status flags here and add the UNKNOWN flag
+    """
+    BEFORE, AFTER, FORK, ERROR, UNKNOWN = np.arange(5)
 
 class Message():
     """
@@ -198,6 +213,35 @@ class Message():
                    "id": idd}
         return message
 
+    @staticmethod
+    def get_mount_status(uid, idd):
+        """
+        Create a message object for polling mount status
+
+        Also return the response code that says things
+        went well. Typically 4
+
+        Parameters
+        ----------
+        uid : string
+            unique ID for this command
+        idd : int
+            unique ID for this command
+
+        Returns
+        -------
+        message : dict
+            JSON dumps ready dict for a remote mount status command
+
+        Raises
+        ------
+        None
+        """
+        message = {"method": "RemoteMountStatusGetInfo",
+                   "params": {"UID": uid},
+                   "id": idd}
+        return message
+
 class Response():
     """
     Keep track of outstanding responses from Voyager
@@ -322,6 +366,11 @@ class Voyager():
         self.ybin_keyword = config['ybin_keyword']
         self.ra_axis = config['ra_axis']
         self._declination = None
+
+        # get type of mount
+        # if GEM we need to handle image flipping
+        self._IS_GEM = None
+        self._last_flip_status = None
 
         # keep track of current status
         self._status = DonutsStatus.UNKNOWN
@@ -509,6 +558,32 @@ class Voyager():
 
         return cont_path
 
+    def __get_mount_status(self):
+        """
+        Ping the mount to see if it is a GEM
+        and what the status is. If it returns FORK
+        then we can ignore all the GEM logic
+        """
+        # check if GEM or Fork, if Fork we can skip things later
+        uuid_mount = str(uuid.uuid4())
+        message_mount = self._msg.get_mount_status(uuid_mount, self._comms_id)
+        # send mount status message
+        payload = self.__send_two_way_message_to_voyager(message_mount)
+        self._comms_id += 1
+
+        if payload['FlipStatus'] == 5:
+            logging.fatal("Cannot determine if mount is GEM or Fork, quitting!")
+            sys.exit(ERROR_MOUNT_TYPE)
+        elif payload['FlipStatus'] == 4:
+            return False, FlipStatus.FORK
+        elif payload['FlipStatus'] in (0, 1):
+            return True, FlipStatus.BEFORE
+        elif payload['FlipSatus'] in (2, 3):
+            return True, FlipStatus.AFTER
+        else:
+            logging.fatal("Got unhandled return from mount status")
+            sys.exit(ERROR_UNHANDLED)
+
     def run(self):
         """
         Open a connection and maintain it with Voyager.
@@ -539,8 +614,11 @@ class Voyager():
         # keep it alive and listen for jobs
         self.__keep_socket_alive()
 
-        # set guiding statuse to IDLE
+        # set guiding status to IDLE
         self._status = DonutsStatus.IDLE
+
+        # get the mount status and type
+        self._IS_GEM, self._last_flip_status = self.__get_mount_status()
 
         # loop until told to stop
         while 1:
@@ -702,6 +780,13 @@ class Voyager():
 
                 last_image = self._latest_guide_frame
 
+                # check if GEM
+                if self._IS_GEM:
+                    # get the mount status and check current flip status
+                    _, current_flip_status = self.__get_mount_status()
+                else:
+                    current_flip_status = FlipStatus.FORK
+
                 # check if we're still observing the same field
                 # pylint: disable=no-member
                 with fits.open(last_image) as ff:
@@ -716,7 +801,8 @@ class Voyager():
 
                 # if something changes or we haven't started yet, sort out a reference image
                 if current_field != self._last_field or current_filter != self._last_filter or \
-                    current_xbin != self._last_xbin or current_ybin != self._last_ybin or self._donuts_ref is None:
+                    current_xbin != self._last_xbin or current_ybin != self._last_ybin or \
+                    current_flip_status != self._last_flip_status or self._donuts_ref is None:
                     # reset PID loop to unstabilised state
                     self.__initialise_pid_loop(stabilised=False)
                     # reset the guide buffer
@@ -727,7 +813,7 @@ class Voyager():
                     # replacement block using database
                     # look for a reference image for this field, filter, binx and biny
                     self._ref_file = vdb.get_reference_image_path(current_field, current_filter,
-                                                                  current_xbin, current_ybin)
+                                                                  current_xbin, current_ybin, current_flip_status)
 
                     # if we have a reference, use it. Otherwise store this image as the new reference frame
                     if self._ref_file is not None:
@@ -740,7 +826,7 @@ class Voyager():
                         copyfile(self._ref_file, f"{self.reference_root}/{ref_filename}")
                         # set thw copied image to the reference in the database
                         vdb.set_reference_image(self._ref_file, current_field, current_filter,
-                                                current_xbin, current_ybin)
+                                                current_xbin, current_ybin, current_flip_status)
                         # set skip correction as new reference was just defined as this current image
                         do_correction = False
 
@@ -754,6 +840,7 @@ class Voyager():
                 self._last_filter = current_filter
                 self._last_xbin = current_xbin
                 self._last_ybin = current_ybin
+                self._last_flip_status = current_flip_status
 
                 # do the correction if required
                 if do_correction:
@@ -802,7 +889,7 @@ class Voyager():
             logging.fatal('Voyager socket connect failed!')
             logging.fatal('Check the application interface is running!')
             traceback.print_exc()
-            sys.exit(1)
+            sys.exit(ERROR_SOCKET)
 
     def __close_socket(self):
         """
@@ -861,53 +948,6 @@ class Voyager():
                 sent = False
 
         return sent
-
-    def __receive(self, n_bytes=2048):
-        """
-        Receive a message of n_bytes in length from Voyager
-
-        Parameters
-        ----------
-        n_bytes : int, optional
-            Number of bytes to read from socket
-            default = 2048
-
-        Returns
-        -------
-        message : dict
-            json parsed response from Voyager
-
-        Raises
-        ------
-        None
-        """
-        # NOTE original code, we have JSON decoding errors, trying to figure it out
-        #try:
-        #    message = json.loads(self.socket.recv(n_bytes))
-        #except s.timeout:
-        #    message = {}
-        #return message
-
-        # load the raw string
-        try:
-            message_raw = self.socket.recv(n_bytes)
-        except s.timeout:
-            message_raw = ""
-
-        # spit out the raw message
-        logging.debug(f"__receive: message_raw={message_raw}")
-
-        # unpack it into a json object
-        if message_raw != "":
-            # NOTE sometimes a message is truncated, try to stop it crashing...
-            try:
-                message = json.loads(message_raw)
-            except json.decoder.JSONDecodeError:
-                message = {}
-        else:
-            message = {}
-
-        return message
 
     def __receive_until_delim(self, delim=b'\r\n'):
         """
@@ -1149,6 +1189,10 @@ class Voyager():
         # add the OK status we want to see returned
         response = Response(uid, idd, self._msg.OK)
 
+        # initialise the payload that will contain param_ret data
+        # needed for commands that return data we care about
+        payload = None
+
         # loop until both responses are received
         cb_loop_count = 0
         while not response.uid_recv:
@@ -1204,7 +1248,7 @@ class Voyager():
 
                 if rec['Event'] == "RemoteActionResult":
                     logging.debug(f"RECEIVED: {rec}")
-                    rec_uid, result, *_ = self.__parse_remote_action_result(rec)
+                    rec_uid, result, _, param_ret = self.__parse_remote_action_result(rec)
 
                     # check we have a response for the thing we want
                     if rec_uid == uid:
@@ -1217,6 +1261,7 @@ class Voyager():
                             logging.debug(f"Command uid: {uid} returned correctly")
                             # add the response, regardless if it's good or bad, so we can end this loop
                             response.uid_received(result)
+                            payload = param_ret
                     else:
                         logging.warning(f"Waiting for uid: {uid}, ignoring response for uid: {rec_uid}")
 
@@ -1245,6 +1290,9 @@ class Voyager():
         # check was everything ok and raise an exception if not
         if not response.all_ok():
             raise Exception(f"ERROR: Could not send message {msg_str}")
+
+        # return the payload
+        return payload
 
     def __calibration_filename(self, direction, pulse_time):
         """
@@ -1698,7 +1746,7 @@ class Voyager():
             logging.error(f"We've been trying to stabilise >{self.n_images_to_stabilise} images")
             logging.error("There appears to be an error, quiting donuts")
             self.__send_donuts_message_to_voyager("DonutsRecenterError", "Failed to stabilise guiding")
-            sys.exit(1)
+            sys.exit(ERROR_STABILISE)
         else:
             pass
 
