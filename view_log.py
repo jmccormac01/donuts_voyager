@@ -43,14 +43,14 @@ def db_cursor(host='127.0.0.1', port=3306, user='donuts',
 if __name__ == "__main__":
     args = arg_parse()
 
-    if args.last_x:
+    if args.last:
         qry = """
             SELECT *
             FROM autoguider_log
             ORDER BY updated DESC
             LIMIT %s
             """
-        qry_args = (args.last_x, )
+        qry_args = (args.last, )
 
     elif args.t1 and args.t2:
         qry = """
