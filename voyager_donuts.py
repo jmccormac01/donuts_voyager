@@ -578,7 +578,7 @@ class Voyager():
             return False, FlipStatus.FORK
         elif payload['FlipStatus'] in (0, 1):
             return True, FlipStatus.BEFORE
-        elif payload['FlipSatus'] in (2, 3):
+        elif payload['FlipStatus'] in (2, 3):
             return True, FlipStatus.AFTER
         else:
             logging.fatal("Got unhandled return from mount status")
