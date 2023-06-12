@@ -32,8 +32,8 @@ CREATE TABLE IF NOT EXISTS autoguider_log (
 );
 
 CREATE USER 'donuts'@'%';
-GRANT SELECT,INSERT ON donuts.autoguider_ref TO 'donuts'@'%';
-GRANT SELECT,INSERT ON donuts.autoguider_log TO 'donuts'@'%';
-GRANT SELECT,INSERT ON donuts.autoguider_ref TO 'donuts'@'localhost';
-GRANT SELECT,INSERT ON donuts.autoguider_log TO 'donuts'@'localhost';
+GRANT ALL PRIVILEGES ON donuts.autoguider_ref TO 'donuts'@'%' WITH GRANT OPTION;
+GRANT ALL PRIVILEGES ON donuts.autoguider_log TO 'donuts'@'%' WITH GRANT OPTION;
+GRANT ALL PRIVILEGES ON donuts.autoguider_ref TO 'donuts'@'localhost' WITH GRANT OPTION;
+GRANT ALL PRIVILEGES ON donuts.autoguider_log TO 'donuts'@'localhost' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
