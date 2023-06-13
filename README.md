@@ -111,7 +111,7 @@ Below are steps to calibrate a fork mount.
    1. Directions are quoted as 0, 1, 2 and 3 and are mapped to +x, -x, +y and -y. Update the ```*.toml``` file to reflect the results
    1. Similarly each direction has a calibrated ms/pixels value. Add the corresponding values for each direction to the ```*.toml``` file.
 
-### Calibrating German Equatorial Mounts
+## Calibrating German Equatorial Mounts
 
 The steps for a GEM are the same as above, but repeated once for 1h east of the meridian and again 1h west of the meridian.
 
