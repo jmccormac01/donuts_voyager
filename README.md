@@ -106,10 +106,11 @@ Below are steps to calibrate a fork mount.
    1. In Voyager's on the fly section click the 'Donuts Calibration' buttong and click 'Yes'
    1. TODO ADD SUPPORT FOR WHICH FILTER TO IMAGE IN, CURRENTLY HARD CODED...
    1. Donuts will command voyager to take a series of images, stepping the mount in N, S, E and W directions between each image
-   1. It will then analyse the images taken and determien the orientation of the camera and the magnitude of autoguiding impulses required
+   1. It will then analyse the images taken and determine the orientation of the camera and the magnitude of autoguiding impulses required
    1. A results file will be output to the ```voyager_calbration``` path on the HOST machine.
    1. Directions are quoted as 0, 1, 2 and 3 and are mapped to +x, -x, +y and -y. Update the ```*.toml``` file to reflect the results
    1. Similarly each direction has a calibrated ms/pixels value. Add the corresponding values for each direction to the ```*.toml``` file.
+   1. TODO: create the lines that can be copy/pasted into the toml file...
 
 ## Calibrating German Equatorial Mounts
 

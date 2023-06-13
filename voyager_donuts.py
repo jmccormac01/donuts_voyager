@@ -165,7 +165,7 @@ class Message():
                               "ROIY": 0,
                               "ROIDX": 0,
                               "ROIDY": 0,
-                              "FilterIndex": 1,
+                              "FilterIndex": 0,
                               "ExpoType": 0,
                               "SpeedIndex": 0,
                               "ReadoutIndex": 0,
