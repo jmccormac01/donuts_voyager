@@ -80,7 +80,8 @@ Docker depends on the Windows Subsystem for Linux (WSL2.0) and this is only avai
       1. Ensure that the final line of the ```Dockerfile``` is pointed at this new config file
       1. The calibration values in the middle section will be set after the initial on-sky calibration run
    1. Build the Docker image for Donuts/Voyager
-      1. ```docker build -t voyager_donuts .```
+      1. Simply double click the ```start.bat``` file and the images will be built. Donuts will be left running. Double click the ```stop.bat``` if you wish to stop donuts
+      1. Assuming all went well, we now have docker images for MySQL and for Donuts. Next step is calibrating the guide routine.
 
 
 # Manually Running Donuts
