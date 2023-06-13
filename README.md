@@ -15,7 +15,7 @@ Below is a short description of each file in this repository
    1. ```disable_all_reference_images.py``` helper script to disable all references in MySQL database
    1. ```disable_reference_image.py``` helper script to disable one particular reference in MySQL database
    1. ```mysql-init.sql``` MySQL script to build initial database tables
-   1. ```requirements.txt```` Python module requirements for donuts
+   1. ```requirements.txt``` Python module requirements for donuts
    1. ```view_log.py``` helper script to view donuts log in MySQL database
    1. ```voyager_db.py``` donuts database functionality
    1. ```voyager_donuts.py``` main donuts script for autoguiding via voyager
