@@ -1,6 +1,25 @@
 # Donuts with Voyager
 
-Initial scribbles to have an event driven version of donuts
+An event driven version of Donuts using the Voyager observatory control system
+
+# Contents
+
+Below is a short description of each file in this repository
+
+   1. ```docker_configs``` example docker config files for various installations
+   1. ```donuts_configs``` example donuts config files for various installations
+   1. ```testing``` scripts used in development of donuts for voyager. Not generally useful
+   1. ```.gitignore``` things to ignore from version control
+   1. ```PID.py``` code for autoguiding PID control loop
+   1. ```README.md``` this file
+   1. ```disable_all_reference_images.py``` helper script to disable all references in MySQL database
+   1. ```disable_reference_image.py``` helper script to disable one particular reference in MySQL database
+   1. ```mysql-init.sql``` MySQL script to build initial database tables
+   1. ```requirements.txt```` Python module requirements for donuts
+   1. ```view_log.py``` helper script to view donuts log in MySQL database
+   1. ```voyager_db.py``` donuts database functionality
+   1. ```voyager_donuts.py``` main donuts script for autoguiding via voyager
+   1. ```voyager_utils.py``` helper functions for donuts
 
 # Installation
 
@@ -63,16 +82,47 @@ Docker depends on the Windows Subsystem for Linux (WSL2.0) and this is only avai
    1. Build the Docker image for Donuts/Voyager
       1. ```docker build -t voyager_donuts .```
 
+
+# Manually Running Donuts
+
+You can manually start and stop donuts by simply double clicking the ```start.bat``` and ```stop.bat``` in the ```donuts_voyager``` repository. Manual starting/stopping is required during calibration (described below)
+
+# Calibrating Donuts
+
+Below are steps required to calibrate donuts. The results from the calibration run must be manually entered into the donuts ```*.toml``` config file.
+Calibration is required initially for new systems and then again only if something changes in the hardware (e.g. you remove and reinstall the camera or collimate the telescope).
+
+Autoguiding works via the ```pulseGuide``` command. This simulates pressing a button on the telescope hand paddle in one of 4 directions at the guiding rate for a number of X milliseconds (don't ask me why...).
+We therefore must calibrate both the direction of the correction and the ratio of ms/pix for each direction. This is automated using the Donuts Calibration routine. However, the results from a calibration run
+must be added manually to the config file. This is on purpose while I figure out the robustness of this proceedure.
+
+## Calibrating Fork Mounts
+
+Below are steps to calibrate a fork mount.
+
+   1. Use Voyager to point the telescope 1h east of the meridian at 0 degrees declination
+   1. Start the mount tracking
+   1. Start the donuts docker container using the ```start.bat``` script
+   1. In Voyager's on the fly section click the 'Donuts Calibration' buttong and click 'Yes'
+   1. TODO ADD SUPPORT FOR WHICH FILTER TO IMAGE IN, CURRENTLY HARD CODED...
+   1. Donuts will command voyager to take a series of images, stepping the mount in N, S, E and W directions between each image
+   1. It will then analyse the images taken and determien the orientation of the camera and the magnitude of autoguiding impulses required
+   1. A results file will be output to the ```voyager_calbration``` path on the HOST machine.
+   1. Directions are quoted as 0, 1, 2 and 3 and are mapped to +x, -x, +y and -y. Update the ```*.toml``` file to reflect the results
+   1. Similarly each direction has a calibrated ms/pixels value. Add the corresponding values for each direction to the ```*.toml``` file.
+
+### Calibrating German Equatorial Mounts
+
+The steps for a GEM are the same as above, but repeated once for 1h east of the meridian and again 1h west of the meridian.
+
+TODO: Finish this when I know whether we can simply invert East corrections for West (or not)...
+
 # Running Donuts Automatically
 
 Voyager can start and stop donuts by calling the ```start.bat``` and ```stop.bat``` scripts that we configured in the Installation section above. This is done by:
 
    1. Add a call to an external script before an observing sequence. Point the external call at the ```start.bat``` script inside the ```donuts_voyager``` repository
    1. To automatically stop donuts after an observing sequence, add an external script call after the observing block. Point the external call at the ```stop.bat``` script in the ```donuts_voyager``` repository
-
-# Manually Running Donuts
-
-You can manually start and stop donuts by simply double clicking the ```start.bat``` and ```stop.bat``` in the ```donuts_voyager``` repository
 
 # Contributors
 
