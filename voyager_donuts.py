@@ -704,7 +704,7 @@ class Voyager():
 
                 # check if we're still observing the same field
                 # pylint: disable=no-member
-                with fits.open(last_image) as ff:
+                with fits.open(last_image, ignore_missing_end=True) as ff:
                     # current field and filter?
                     current_filter = ff[0].header[self.filter_keyword]
                     current_field = ff[0].header[self.field_keyword]
