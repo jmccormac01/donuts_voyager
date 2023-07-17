@@ -76,9 +76,11 @@ Docker depends on the Windows Subsystem for Linux (WSL2.0) and this is only avai
       1. Anything in the ```secrets/``` folder is automatically excluded from version control in the ```.gitignore``` file
       1. Once you've memorised the root password and have built donuts (see below) and ran it a few times (see further below), you should delete the ```secrets/mysql_root``` file.
    1. Next we need to edit the donuts config file for our new system:
-      1. Copy the ```example.toml``` file and edit the top section to set the paths to the data and FITS keywords etc
+      1. Copy the example ```james_test.toml``` file and edit the top section to set the paths to the data and FITS keywords etc
       1. Ensure that the final line of the ```Dockerfile``` is pointed at this new config file
-      1. The calibration values in the middle section will be set after the initial on-sky calibration run
+      1. Set the ```ra_axis``` to ```x``` or ```y``` depending on the orientation of your camera.
+      1. Set the telescope ```mount_type``` to ```FORK``` or ```GEM```.
+      1. The ```guide_directions``` and ```pixels_to_time``` lines will be set after the initial on-sky calibration run
    1. Build the Docker image for Donuts/Voyager
       1. Simply double click the ```start.bat``` file and the images will be built. Donuts will be left running. Double click the ```stop.bat``` if you wish to stop donuts
       1. Assuming all went well, we now have docker images for MySQL and for Donuts. Next step is calibrating the guide routine.
@@ -109,15 +111,24 @@ Below are steps to calibrate a fork mount.
    1. Donuts will command voyager to take a series of images, stepping the mount in N, S, E and W directions between each image
    1. It will then analyse the images taken and determine the orientation of the camera and the magnitude of autoguiding impulses required
    1. A results file will be output to the ```voyager_calbration``` path on the HOST machine.
-   1. Directions are quoted as 0, 1, 2 and 3 and are mapped to +x, -x, +y and -y. Update the ```*.toml``` file to reflect the results
-   1. Similarly each direction has a calibrated ms/pixels value. Add the corresponding values for each direction to the ```*.toml``` file.
-   1. TODO: create the lines that can be copy/pasted into the toml file...
+   1. Directions are quoted as 0, 1, 2 and 3 and are mapped to +x, -x, +y and -y.
+   1. Similarly each direction has a calibrated ms/pixels value.
+   1. If the calibration run is successful, a pair of lines are written to the results file that can be copied directly into the .toml file.
+      1. These lines start ```pixels_to_time = ...``` and ```guide_directions = ...```.
+      1. Replace both corresponding lines in the .toml template with the calibrated info.
+   1. If the calibration fails, these lines are skipped and you must look at the reported directions and scales to determine the issue.
 
 ## Calibrating German Equatorial Mounts
 
 The steps for a GEM are the same as above, but repeated once for 1h east of the meridian and again 1h west of the meridian.
+Each calibration run will produce a pair of lines to enter into the .toml config file:
 
-TODO: Finish this when I know whether we can simply invert East corrections for West (or not)...
+   1. For East calibration:
+      1. ```guide_directions_east``` and ```pixels_to_time_east```
+   1. For West calibration:
+      1. ```guide_directions_west``` and ```pixels_to_time_west```
+
+Be sure to remove or comment out ```guide_directions``` and ```pixels_to_time``` (without directional suffixes). These parameters are used for fork mounts only.
 
 # Running Donuts Automatically
 

@@ -1520,10 +1520,12 @@ class Voyager():
 
         # now do some analysis on the run from above
         # check that the directions are the same every time for each orientation
+        skip_config_lines = False
         for direc in self._direction_store:
             logging.info(self._direction_store[direc])
             if len(set(self._direction_store[direc])) != 1:
                 logging.error(f"ERROR: PROBLEM WITH CALIBRATED DIRECTION {self._direction_store[direc]}")
+                skip_config_lines = True
             logging.info(f"{direc}: {self._direction_store[direc][0]}")
 
             # write out the direction_store contents for easy finding
@@ -1531,9 +1533,12 @@ class Voyager():
             self.__append_to_file(self._calibration_results_path, line)
 
         # now work out the ms/pix scales from the calbration run above
+        ratios = {}
         for direc in self._scale_store:
-            ratio = self.calibration_step_size_ms/np.average(self._scale_store[direc])
-            logging.info(f"{direc}: {ratio:.2f} ms/pixel")
+            ratio = round(self.calibration_step_size_ms/np.average(self._scale_store[direc]), 2)
+            logging.info(f"{direc}: {ratio} ms/pixel")
+            # store these for later
+            ratios[direc] = ratio
 
             # write out the scale_store contents for easy finding
             line = f"{direc}: {self._scale_store[direc]}\n"
@@ -1542,6 +1547,35 @@ class Voyager():
             # write out the average correction too
             line = f"{direc}: {ratio:.2f} ms/pixel\n"
             self.__append_to_file(self._calibration_results_path, line)
+
+        # write out directly the lines that need to go into the config .toml file
+        # but only if there were no errors
+        if not skip_config_lines:
+            if self._IS_GEM and self._last_flip_status == 0:
+                pixels_to_time_line = "pixels_to_time_east = {"
+                guide_directions_line = "guide_directions_east = {"
+            elif self._IS_GEM and self._last_flip_status == 1:
+                pixels_to_time_line = "pixels_to_time_west = {"
+                guide_directions_line = "guide_directions_west = {"
+            else:
+                pixels_to_time_line = "pixels_to_time = {"
+                guide_directions_line = "guide_directions = {"
+
+            for direc in self._scale_store:
+                pixels_to_time_line += f'\"{self._direction_store[direc][0]}\" = {ratios[direc]}, '
+                guide_directions_line += f'\"{self._direction_store[direc][0]}\" = {direc}, '
+
+            # remove the extra ', ' and add a closing brace and a newline character
+            pixels_to_time_line = pixels_to_time_line[:-2] + "}\n"
+            guide_directions_line = guide_directions_line[:-2] + "}\n"
+
+            self.__append_to_file(self._calibration_results_path, "\nCopy the lines below into the .toml config file\n")
+            self.__append_to_file(self._calibration_results_path, "Be sure to remove any conflicting calibration data\n")
+            self.__append_to_file(self._calibration_results_path, pixels_to_time_line)
+            self.__append_to_file(self._calibration_results_path, guide_directions_line)
+        else:
+            self.__append_to_file(self._calibration_results_path, "\nPROBLEM WITH CALIBRATED DIRECTIONS, SKIPPED SUMMARY LINES\n")
+            self.__append_to_file(self._calibration_results_path, "SEE REPORT ABOVE FOR CAUSE OF ISSUE\n")
 
         # print out the storage areas for reference in case some bad measurements were made
         for direc in self._direction_store:
