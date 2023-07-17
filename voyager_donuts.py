@@ -35,6 +35,12 @@ from PID import PID
 # pylint: disable=too-many-lines
 # pylint: disable=too-many-instance-attributes
 # pylint: disable=broad-except
+# pylint: disable=redefined-outer-name
+
+# expected config keys
+expected_gem_keys = set(['pixels_to_time_east', 'pixels_to_time_west',
+                         'guide_directions_east', 'guide_directions_west'])
+expected_fork_keys = set(['pixels_to_time', 'guide_directions'])
 
 # some error codes when exiting
 ERROR_SOCKET, ERROR_MOUNT_TYPE, ERROR_STABILISE, ERROR_UNHANDLED = np.arange(4)
@@ -454,8 +460,9 @@ class Voyager():
         self._images_to_stabilise = self.n_images_to_stabilise
 
         # calibrated pixels to time ratios and the directions
-        self.pixels_to_time = config['pixels_to_time']
-        self.guide_directions = config['guide_directions']
+        # new in GEM support, set these later once we know mount_type | flip status
+        self.pixels_to_time = None
+        self.guide_directions = None
 
         # initialise all the things
         self.__initialise_guide_buffer()
@@ -587,6 +594,40 @@ class Voyager():
             logging.fatal("Got unhandled return from mount status")
             sys.exit(ERROR_UNHANDLED)
 
+    def __update_guiding_configuration(self, is_gem, current_flip_status):
+        """
+        Update the guiding configuration for a FORK
+        or GEM mount. If GEM this is called after each
+        mount status update. If FORK this is set at the
+        beginning of a run only
+
+        Parameters
+        ----------
+        is_gem : boolean
+            is this a German Equatorial Mount?
+        current_flip_status : int
+            see FlipStatus class for options
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        None
+        """
+        if is_gem and current_flip_status == FlipStatus.BEFORE:
+            self.pixels_to_time = config['pixels_to_time_east']
+            self.guide_directions = config['guide_directions_east']
+        elif is_gem and current_flip_status == FlipStatus.AFTER:
+            self.pixels_to_time = config['pixels_to_time_west']
+            self.guide_directions = config['guide_directions_west']
+        elif not is_gem:
+            self.pixels_to_time = config['pixels_to_time']
+            self.guide_directions = config['guide_directions']
+        else:
+            pass
+
     def run(self):
         """
         Open a connection and maintain it with Voyager.
@@ -622,6 +663,8 @@ class Voyager():
 
         # get the mount status and type
         self._IS_GEM, self._last_flip_status = self.__get_mount_status()
+        # update the guide config directions and scales now we know about the mount
+        self.__update_guiding_configuration(self._IS_GEM, self._last_flip_status)
 
         # loop until told to stop
         while 1:
@@ -786,7 +829,8 @@ class Voyager():
                 # check if GEM
                 if self._IS_GEM:
                     # get the mount status and check current flip status
-                    _, current_flip_status = self.__get_mount_status()
+                    is_gem, current_flip_status = self.__get_mount_status()
+                    self.__update_guiding_configuration(is_gem, current_flip_status)
                 else:
                     current_flip_status = FlipStatus.FORK
 
@@ -1856,6 +1900,26 @@ if __name__ == "__main__":
         logging.basicConfig(filename=log_file_path,
                             level=level,
                             format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
+
+    # sanity check mount type before continuing
+    if 'mount_type' in config:
+        if config['mount_type'] == "GEM":
+            # confirm we have east and west keys by determining overlap of keys
+            if len(set(config) & expected_gem_keys) != len(expected_gem_keys):
+                logging.fatal(f"Need both east and west calibration params {expected_gem_keys} for a GEM mount, exiting")
+                sys.exit(ERROR_MOUNT_TYPE)
+        elif config['mount_type'] == "FORK":
+            if len(set(config) & expected_fork_keys) != len(expected_fork_keys):
+                logging.fatal(f"Need calibration params {expected_fork_keys} for a FORK mount, exiting")
+                sys.exit(ERROR_MOUNT_TYPE)
+        else:
+            logging.fatal("Parameter 'mount_type' must be FORK or GEM, exiting")
+            sys.exit(ERROR_MOUNT_TYPE)
+    # assume fork, check for fork keys
+    else:
+        if len(set(config) & expected_fork_keys) != len(expected_fork_keys):
+            logging.fatal(f"Need calibration params {expected_fork_keys} for a FORK mount, exiting")
+            sys.exit(ERROR_MOUNT_TYPE)
 
     # set up Voyager/Donuts
     voyager = Voyager(config)

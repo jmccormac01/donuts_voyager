@@ -35,13 +35,21 @@ donuts_subtract_bkg = false
 
 # guiding characteristics
 ra_axis = "y"
-pixels_to_time = {"+x" = 92.98, "-x" = 94.49, "+y" = 93.65, "-y" = 92.57}
-guide_directions = {"+y" = 3, "-y" = 2, "+x" = 1, "-x" = 0}
+# if mount_type = "GEM" you need calibration data for East and West sides of meridian
+mount_type = "GEM"
+pixels_to_time_east = {"+x" = 58.12, "-x" = 57.53, "+y" = 46.2, "-y" = 46.18}
+pixels_to_time_west = {"+x" = 57.56, "-x" = 57.8, "+y" = 41.97, "-y" = 43.11}
+guide_directions_east = {"+y" = 0, "-y" = 1, "+x" = 2, "-x" = 3}
+guide_directions_west = {"+y" = 1, "-y" = 0, "+x" = 3, "-x" = 2}
+# if mount_type = "FORK" or mount_type is not supplied (FORK assumed)
+# you need only one set of config parameters with same syntax as before GEM support was added
+#mount_type = "FORK"
+#pixels_to_time = {"+x" = 92.98, "-x" = 94.49, "+y" = 93.65, "-y" = 92.57}
+#guide_directions = {"+y" = 3, "-y" = 2, "+x" = 1, "-x" = 0}
 
 ######################################################
 # DO NOT CHANGE INFO BELOW HERE UNLESS INSTRUCTED TO #
 ######################################################
-
 # voyager info
 socket_ip = "host.docker.internal"
 socket_port = 5950
