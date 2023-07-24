@@ -762,7 +762,7 @@ class Voyager():
                     logging.info(f"Raw shift measured: x:{shift.x.value:.2f} y:{shift.y.value:.2f}")
 
                     # process the shifts and add the results to the queue
-                    direction, duration = self.__process_guide_correction(shift)
+                    direction, duration = self.__process_guide_correction(shift, current_xbin, current_ybin)
 
                     # add the post-PID values to the results queue
                     self._results_queue.put((direction, duration))
@@ -1339,6 +1339,10 @@ class Voyager():
         to determine the shift and calibrate the pulse
         guide command.
 
+        NOTE: we assume that the calibration is done in 1x1
+        binning, then if binning is used the values are scaled
+        accordingly.
+
         Parameters
         ----------
         None
@@ -1566,7 +1570,7 @@ class Voyager():
             yt = y
         return xt, yt
 
-    def __determine_direction_and_duration(self, x, y, cos_dec):
+    def __determine_direction_and_duration(self, x, y, cos_dec, xbin, ybin):
         """
         Take the correction in X and Y in pixels
         and convert it to a direction and duration object
@@ -1578,6 +1582,12 @@ class Voyager():
             X correction
         y : float
             Y correction
+        cos_dec : float
+            scaling coeff for RA
+        xbin : int
+            binning factor in x
+        ybin : int
+            binning factor in y
 
         Returns
         -------
@@ -1622,14 +1632,16 @@ class Voyager():
             guide_direction_y = self.guide_directions["+y"]
 
         # bake these final values into the direction/duration results
+        # here we scale the values by xbin and ybin, assuming that calibration
+        # was done on binning 1x1
         direction = {"x": guide_direction_x,
                      "y": guide_direction_y}
-        duration = {"x": guide_time_x,
-                    "y": guide_time_y}
+        duration = {"x": guide_time_x * xbin,
+                    "y": guide_time_y * ybin}
 
         return direction, duration
 
-    def __process_guide_correction(self, shift):
+    def __process_guide_correction(self, shift, xbin, ybin):
         """
         Take a Donuts shift object. Analyse the x and y
         components. Compare them to the recent history of
@@ -1642,6 +1654,10 @@ class Voyager():
         shift : Donuts.shift object
             Contains the X and Y offset values for a
             recently analysed image
+        xbin : int
+            Level of image binning in x direction
+        ybin : int
+            Level of image binning in y direction
 
         Returns
         -------
@@ -1761,7 +1777,7 @@ class Voyager():
         vdb.log_shifts_to_db(shift_args)
 
         # convert correction into direction/duration objects
-        direction, duration = self.__determine_direction_and_duration(final_x, final_y, cos_dec)
+        direction, duration = self.__determine_direction_and_duration(final_x, final_y, cos_dec, xbin, ybin)
 
         # store the original pre-pid values in the buffer
         self._buff_x.append(pre_pid_x)
