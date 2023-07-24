@@ -1379,10 +1379,12 @@ class Voyager():
         try:
             message_shot = self._msg.camera_shot(shot_uuid, self._comms_id, self.calibration_exptime, "true", filename_host)
             self.__send_two_way_message_to_voyager(message_shot)
+            logging.info(f"CALIB: sending message_shot: {message_shot}")
             self._comms_id += 1
             self._image_id += 1
         except Exception:
             self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename_host}")
+            logging.error(f"ERROR CALIB: failed to send message_shot: {message_shot}")
 
         # make the image we took the reference image
         donuts_ref = Donuts(filename_cont, subtract_bkg=self.donuts_subtract_bkg)
@@ -1396,10 +1398,12 @@ class Voyager():
                     message_pg = self._msg.pulse_guide(uuid_i, self._comms_id, i, self.calibration_step_size_ms)
                     # send pulse guide command in direction i
                     self.__send_two_way_message_to_voyager(message_pg)
+                    logging.info(f"CALIB: sending message_pg: {message_pg}")
                     self._comms_id += 1
                 except Exception:
                     # send a recentering error
                     self.__send_donuts_message_to_voyager("DonutsRecenterError", f"Failed to PulseGuide {i} {self.calibration_step_size_ms}")
+                    logging.error(f"ERROR CALIB: failed to send message_pg: {message_pg}")
                     traceback.print_exc()
 
                 # take an image
@@ -1411,10 +1415,12 @@ class Voyager():
                     shot_uuid = str(uuid.uuid4())
                     message_shot = self._msg.camera_shot(shot_uuid, self._comms_id, self.calibration_exptime, "true", filename_host)
                     self.__send_two_way_message_to_voyager(message_shot)
+                    logging.info(f"CALIB: sending message_shot: {message_shot}")
                     self._comms_id += 1
                     self._image_id += 1
                 except Exception:
                     self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename_host}")
+                    logging.error(f"ERROR CALIB: failed to send message_shot: {message_shot}")
 
                 # measure the offset and update the reference image
                 shift = donuts_ref.measure_shift(filename_cont)
@@ -1429,7 +1435,7 @@ class Voyager():
         for direc in self._direction_store:
             logging.info(self._direction_store[direc])
             if len(set(self._direction_store[direc])) != 1:
-                logging.error(f"ERROR: PROBLEM WITH CALIBRATED DIRECTION {self._direction_store[direc]}")
+                logging.error(f"ERROR CALIB: PROBLEM WITH CALIBRATED DIRECTION {self._direction_store[direc]}")
             logging.info(f"{direc}: {self._direction_store[direc][0]}")
 
             # write out the direction_store contents for easy finding
