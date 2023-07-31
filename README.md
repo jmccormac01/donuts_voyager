@@ -119,6 +119,7 @@ This is much simpler than the initial setup above. To do a complete rebuild:
       1. This will invalidate the long term reference image storage. New references will be taken during the next observation sequence.
    1. Run the ```start.bat``` script. This will rebuild both images and apply all upgrades
    1. Run the ```stop.bat``` script, if you do not want to continue observing right now.
+   1. If there have been no changes to the telescope hardware then you DO NOT need to redo the calibration process.
 
 
 # Manually Running Donuts
