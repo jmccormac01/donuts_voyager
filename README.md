@@ -153,14 +153,14 @@ Voyager can start and stop donuts by calling the ```start.bat``` and ```stop.bat
 # Managing Reference Images
 
 If anything in your telescope changes (e.g. you remove and reinstall your camera), the long term reference images become invalid. Additionally, if a bad reference image is taken (e.g. a plane flies through the image), you will want to disable that reference.
-There are two helper scripts to simplify managing reference images. One quickly disbales a single reference image and the other diables all reference images. Below are instructions on using each.
+There are two helper scripts to simplify managing reference images in the MySQL database. One quickly disables a selection of reference images (potentially a single reference) and the other disables all reference images. Below are instructions on using each.
 
 ## Disable a Single Reference Image
 
-This script takes many arguments to target exactly a single reference image in the database. It can also take '%' wildcard symbols to signify all matching rows. See below for examples.
+This script takes many arguments to target a subset or even a single reference image in the database. It can also take the wildcard symbol ```%``` to select multiple matching entries. See below for examples.
 
    1. Open a terminal inside the ```voyager_donuts``` running container in Docker Desktop
-   1. Run ```python disable_reference_image.py -h`` to see the help file
+   1. Run ```python disable_reference_image.py -h``` to see the help file
    ```
 ▶ python disable_reference_image.py -h
 usage: Disable reference images [-h] [--filter FILTER] [--xbin XBIN] [--ybin YBIN]
@@ -183,8 +183,8 @@ options:
   --flip_status FLIP_STATUS
                         flip status of field to disable
    ```
-   1. A value is required for each input in order to target the correct reference image.
-   1. However, you can supply a wildcard value (%) to match all values of a given parameter.
+   1. A value is required for each input in order to target the correct reference image(s).
+   1. However, you can supply a wildcard value ```%``` to match all values of a given parameter.
    1. For example:
       1. To disable all reference images for field "SP101" regardless of filter, binning etc
       1. ```python disable_reference_image.py SP101 --filter % --xbin % --ybin % --xsize % --ysize % --xorigin % --yorigin % --flip_status %```
@@ -210,8 +210,10 @@ options:
 
 ## Disable All Reference Images
 
+If a hardware change has invalidated all reference images, they can be disbaled using the following:
+
    1. Open a terminal inside the ```voyager_donuts``` running container in Docker Desktop
-   1. Run ```python disable_all_reference_images.py --all`` to disable all reference images
+   1. Run ```python disable_all_reference_images.py --all``` to disable all reference images
    1. Note, the ```--all``` is needed to confirm you want to do this (potentially dangerous) activity
 
 # Contributors
