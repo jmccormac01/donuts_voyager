@@ -1022,7 +1022,7 @@ class Voyager():
                         do_correction = False
 
                     # make this image the reference
-                    if self._APPLY_IMAGE_MASK and self._full_frame_boolean_mask:
+                    if self._APPLY_IMAGE_MASK and self._full_frame_boolean_mask is not None:
                         image_pixel_mask = self.__extract_image_pixel_mask(current_xbin, current_ybin,
                                                                            full_frame=False,
                                                                            width_x=current_xsize,
@@ -1645,7 +1645,7 @@ class Voyager():
             self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename_host}")
 
         # make the image we took the reference image
-        if self._APPLY_IMAGE_MASK and self._full_frame_boolean_mask:
+        if self._APPLY_IMAGE_MASK and self._full_frame_boolean_mask is not None:
             image_pixel_mask = self.__extract_image_pixel_mask(self.calibration_binning,
                                                                self.calibration_binning,
                                                                full_frame=True)
@@ -1691,7 +1691,7 @@ class Voyager():
                 logging.info(f"SHIFT: {direction} {magnitude}")
                 self._direction_store[i].append(direction)
                 self._scale_store[i].append(magnitude)
-                if self._APPLY_IMAGE_MASK and self._full_frame_boolean_mask:
+                if self._APPLY_IMAGE_MASK and self._full_frame_boolean_mask is not None:
                     image_pixel_mask = self.__extract_image_pixel_mask(self.calibration_binning,
                                                                        self.calibration_binning,
                                                                        full_frame=True)
