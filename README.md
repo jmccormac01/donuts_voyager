@@ -103,7 +103,7 @@ After the initial installation, you may need to rebuild the Donuts Docker image 
    1. Wait for that to complete. You should see a new image appear in Docker Desktop.
 
 
-# Rebuilding the Complete Docker and MySQL Environment
+# Rebuilding the Complete Donuts and MySQL Docker Environment
 
 After major upgrades to Donuts, the MySQL database schema might change. This means that both the code and the reference image database need rebuilding.
 This is much simpler than the initial setup above. To do a complete rebuild:
