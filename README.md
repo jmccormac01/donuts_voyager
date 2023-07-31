@@ -6,6 +6,7 @@ An event driven version of Donuts using the Voyager observatory control system
 
 Below is a short description of each file in this repository
 
+   1. ```CHANGELOG.md``` quick summary of recent changes to voyager donuts
    1. ```docker_configs``` example docker config files for various installations
    1. ```donuts_configs``` example donuts config files for various installations
    1. ```testing``` scripts used in development of donuts for voyager. Not generally useful
@@ -20,6 +21,7 @@ Below is a short description of each file in this repository
    1. ```voyager_db.py``` donuts database functionality
    1. ```voyager_donuts.py``` main donuts script for autoguiding via voyager
    1. ```voyager_utils.py``` helper functions for donuts
+
 
 # Installation
 
@@ -78,7 +80,7 @@ Docker depends on the Windows Subsystem for Linux (WSL2.0) and this is only avai
    1. Next we need to edit the donuts config file for our new system:
       1. Copy the example ```james_test.toml``` file and edit the top section to set the paths to the data and FITS keywords etc
       1. Ensure that the final line of the ```Dockerfile``` is pointed at this new config file
-      1. Set the ```calibration_filter_index``` to the filter position (0, 1, ... N_filters) you'd liketo use for calibration. A broadband optical filter is suggested.
+      1. Set the ```calibration_filter_index``` to the filter position (0, 1, ... N_filters) you'd like to use for calibration. A broadband optical filter is suggested.
       1. Set the ```calibration_binning``` level. For very large sensors a binning factor of 2 or 3 is suggested. For most small format devices (e.g. 1k x 1k or 2k x 2k) binning of 1 is fine.
       1. Set the ```ra_axis``` to ```x``` or ```y``` depending on the orientation of your camera.
       1. Set the telescope ```mount_type``` to ```FORK``` or ```GEM```.
@@ -87,7 +89,8 @@ Docker depends on the Windows Subsystem for Linux (WSL2.0) and this is only avai
       1. Simply double click the ```start.bat``` file and the images will be built. Donuts will be left running. Double click the ```stop.bat``` if you wish to stop donuts
       1. Assuming all went well, we now have docker images for MySQL and for Donuts. Next step is calibrating the guide routine.
 
-# Rebuilding Donuts Docker Image
+
+# Rebuilding the Donuts Docker Image
 
 After the initial installation, you may need to rebuild the Donuts Docker image (e.g. there is an update to the code). To do so:
 
@@ -98,6 +101,25 @@ After the initial installation, you may need to rebuild the Donuts Docker image 
    1. Rebuild the image:
       1. ```docker build -t voyager_donuts .```
    1. Wait for that to complete. You should see a new image appear in Docker Desktop.
+
+
+# Rebuilding the Complete Docker and MySQL Environment
+
+After major upgrades to Donuts, the MySQL database schema might change. This means that both the code and the reference image database need rebuilding.
+This is much simpler than the initial setup above. To do a complete rebuild:
+
+   1. In GitHub Desktop, pull the latest version of the code (check correct branch for development features)
+   1. Check the ```donuts_configs/james_test.toml``` file to look for new donuts config parameters
+   1. As of 2023-07-31 a ```CHANGELOG.md``` file is included, this will outline any new config parameters
+   1. Add new entries to your config file with suitable parameters (e.g. new corresponding fits header keywords or calibration parameters)
+   1. In Docker Desktop:
+      1. In the containers tab, stop any running containers and delete them
+      1. In the images tab, delete the ```voyager_donuts``` and ```db``` images
+      1. In the volumes tab, delete the ```mysql``` volume
+      1. This will invalidate the long term reference image storage. New references will be taken during the next observation sequence.
+   1. Run the ```start.bat``` script. This will rebuild both images and apply all upgrades
+   1. Run the ```stop.bat``` script, if you do not want to continue observing right now.
+
 
 # Manually Running Donuts
 
@@ -119,8 +141,8 @@ Below are steps to calibrate a fork mount.
    1. Use Voyager to point the telescope 1h east of the meridian at 0 degrees declination
    1. Start the mount tracking
    1. Start the donuts docker container using the ```start.bat``` script
-   1. In Voyager's on the fly section click the 'Donuts Calibration' buttong and click 'Yes'
-   1. TODO ADD SUPPORT FOR WHICH FILTER TO IMAGE IN, CURRENTLY HARD CODED...
+   1. In Voyager's on the fly section click the 'Donuts Calibration' button and click 'Yes'
+   1. The config parameters ```calibration_filter_index``` and ```calibration_binning``` allow you to select which filter ID (0, 1, ... N_filters) and binning level to apply during calibration.
    1. Donuts will command voyager to take a series of images, stepping the mount in N, S, E and W directions between each image
    1. It will then analyse the images taken and determine the orientation of the camera and the magnitude of autoguiding impulses required
    1. A results file will be output to the ```voyager_calbration``` path on the HOST machine.

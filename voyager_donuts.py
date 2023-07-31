@@ -43,7 +43,8 @@ expected_gem_keys = set(['pixels_to_time_east', 'pixels_to_time_west',
 expected_fork_keys = set(['pixels_to_time', 'guide_directions'])
 
 # some error codes when exiting
-ERROR_SOCKET, ERROR_MOUNT_TYPE, ERROR_STABILISE, ERROR_UNHANDLED = np.arange(4)
+ERROR_SOCKET, ERROR_MOUNT_TYPE, ERROR_STABILISE, ERROR_UNHANDLED, \
+    ERROR_FILE_MISSING = np.arange(5)
 
 def arg_parse():
     """
@@ -131,7 +132,7 @@ class Message():
         return message
 
     @staticmethod
-    def camera_shot(uid, idd, exptime, save_file, filename):
+    def camera_shot(uid, idd, exptime, filter_index, binning, save_file, filename):
         """
         Create a message object for taking an image
         with the CCD camera
@@ -147,6 +148,10 @@ class Message():
             unique ID for this command
         exptime : int
             exposure time of the image to be taken
+        filter_index : int
+            position id of calibration filter
+        binning : int
+            binning level in both directions
         save_file : boolean
             flag to save the file or not
         filename : string
@@ -164,14 +169,14 @@ class Message():
         message = {"method": "RemoteCameraShot",
                    "params": {"UID": uid,
                               "Expo": exptime,
-                              "Bin": 1,
+                              "Bin": binning,
                               "IsROI": "false",
                               "ROITYPE": 0,
                               "ROIX": 0,
                               "ROIY": 0,
                               "ROIDX": 0,
                               "ROIDY": 0,
-                              "FilterIndex": 0,
+                              "FilterIndex": filter_index,
                               "ExpoType": 0,
                               "SpeedIndex": 0,
                               "ReadoutIndex": 0,
@@ -371,6 +376,10 @@ class Voyager():
         self.xbin_keyword = config['xbin_keyword']
         self.ybin_keyword = config['ybin_keyword']
         self.ra_axis = config['ra_axis']
+        self.xsize_keyword = config['xsize_keyword']
+        self.ysize_keyword = config['ysize_keyword']
+        self.xorigin_keyword = config['xorigin_keyword']
+        self.yorigin_keyword = config['yorigin_keyword']
         self._declination = None
 
         # get type of mount
@@ -418,12 +427,20 @@ class Voyager():
         self._direction_store = None
         self._scale_store = None
 
+        # set up calibration observations
+        self.calibration_filter_index = config['calibration_filter_index']
+        self.calibration_binning = config['calibration_binning']
+
         # add some places to keep track of reference images change overs
         self._ref_file = None
         self._last_field = None
         self._last_filter = None
         self._last_xbin = None
         self._last_ybin = None
+        self._last_xsize = None
+        self._last_ysize = None
+        self._last_xorigin = None
+        self._last_yorigin = None
         self._donuts_ref = None
 
         # set up the PID loop coeffs etc
@@ -464,6 +481,20 @@ class Voyager():
         self.pixels_to_time = None
         self.guide_directions = None
 
+        # check if we want to do image masking?
+        try:
+            self.full_frame_boolean_mask_file = f"{self.calibration_root}/{config['full_frame_boolean_mask_file']}"
+            self._APPLY_IMAGE_MASK = True
+        except KeyError:
+            self.full_frame_boolean_mask_file = None
+            self._APPLY_IMAGE_MASK = False
+
+        # if masking, load the full frame mask
+        if self._APPLY_IMAGE_MASK:
+            self._full_frame_boolean_mask = self.__load_full_frame_boolean_mask()
+        else:
+            self._full_frame_boolean_mask = None
+
         # initialise all the things
         self.__initialise_guide_buffer()
 
@@ -472,6 +503,18 @@ class Voyager():
 
         # some donuts algorithm config
         self.donuts_subtract_bkg = config['donuts_subtract_bkg']
+
+    def __load_full_frame_boolean_mask(self):
+        """
+        Try loading a mask from disc
+        """
+        try:
+            with fits.open(self.full_frame_boolean_mask_file) as ff:
+                full_frame_mask = ff[0].data
+        except FileNotFoundError:
+            print(f"Mask file {self.full_frame_boolean_mask_file} is missing, exiting.")
+            sys.exit(ERROR_FILE_MISSING)
+        return full_frame_mask
 
     def __resolve_host_path(self, data_type, path):
         """
@@ -796,6 +839,93 @@ class Voyager():
         else:
             return int(d) + float(m)/60. + float(s)/3600.
 
+    def __extract_image_pixel_mask(self, xbin, ybin, full_frame=False, width_x=0, height_y=0, \
+                                   subf_start_x=0, subf_start_y=0):
+        """
+        Take the full frame mask. Apply any binning to it, then
+        slice out any subframe currently applied to the science images
+
+        Parameters
+        ----------
+        xbin : int
+            binning level in x
+        ybin : int
+            binning level in y
+        full_frame : bool
+            force full frame mask return (binned or not)
+        width_x : int
+            width of image if selecting subframe
+        height_y : int
+            height of image if selecting subframe
+        subf_start_x : int
+            x origin of subframe
+        subf_start_y : int
+            y origin of subframe
+
+        Returns
+        -------
+        image_pixel_mask : array
+            boolean mask binned and/or subframed
+
+        Raises
+        ------
+        None
+        """
+        image_pixel_mask = self._full_frame_boolean_mask
+        # apply binning if not 1x1
+        if not xbin == ybin == 1:
+            image_pixel_mask = self.__bin_boolean_mask(image_pixel_mask, xbin, ybin)
+
+        # select subframe if defined
+        if full_frame:
+            return image_pixel_mask
+        else:
+            # slice out any subframe
+            image_pixel_mask = image_pixel_mask[subf_start_y: subf_start_y + height_y,
+                                                subf_start_x: subf_start_x + width_x]
+        return image_pixel_mask
+
+    @staticmethod
+    def __bin_boolean_mask(data, xbin, ybin):
+        """
+        Bin a boolean mask
+
+        Note:
+            We do a max in each cell, rather than
+            a sum to keep 0 | 1 in the result
+
+            Additional pixels that do not complete a
+            bin are ignored
+
+        Parameters
+        ----------
+        data : array
+            full frame boolean mask to bin
+        xbin : int
+            binning factor in x (across columns)
+        ybin : int
+            binning factor in y (across rows)
+
+        Returns
+        -------
+        y : array
+            binned boolean mask
+
+        Raises
+        ------
+        None
+        """
+        nrows, ncols = data.shape
+        n_binned_cols = ncols//xbin
+        n_binned_rows = nrows//ybin
+        x = np.zeros((nrows, n_binned_cols), dtype=np.uint16)
+        y = np.zeros((n_binned_rows, n_binned_cols), dtype=np.uint16)
+        for i in range(nrows):
+            x[i] = np.max(data[i][:n_binned_cols*xbin].reshape(n_binned_cols, xbin), axis=1)
+        for i in range(n_binned_cols):
+            y[:, i] = np.max(x[:, i][:n_binned_rows*ybin].reshape(n_binned_rows, ybin), axis=1)
+        return y
+
     def __guide_loop(self):
         """
         Analyse incoming images for guiding offsets.
@@ -843,12 +973,19 @@ class Voyager():
                     current_xbin = ff[0].header[self.xbin_keyword]
                     current_ybin = ff[0].header[self.ybin_keyword]
                     declination = ff[0].header[self.dec_keyword]
+                    current_xsize = ff[0].header[self.xsize_keyword]
+                    current_ysize = ff[0].header[self.ysize_keyword]
+                    current_xorigin = ff[0].header[self.xorigin_keyword]
+                    current_yorigin = ff[0].header[self.yorigin_keyword]
                     self._declination = self.__dec_str_to_deg(declination)
                 # pylint: enable=no-member
 
                 # if something changes or we haven't started yet, sort out a reference image
                 if current_field != self._last_field or current_filter != self._last_filter or \
                     current_xbin != self._last_xbin or current_ybin != self._last_ybin or \
+                    current_xsize != self._last_xsize or current_ysize != self._last_ysize or \
+                    current_xorigin != self._last_xorigin or \
+                    current_yorigin != self._last_yorigin or \
                     current_flip_status != self._last_flip_status or self._donuts_ref is None:
                     logging.info("Detected change in observing sequence, reinitialising donuts...")
                     # reset PID loop to unstabilised state
@@ -860,8 +997,10 @@ class Voyager():
 
                     # replacement block using database
                     # look for a reference image for this field, filter, binx and biny
-                    self._ref_file = vdb.get_reference_image_path(current_field, current_filter,
-                                                                  current_xbin, current_ybin, current_flip_status)
+                    self._ref_file = vdb.get_reference_image_path(current_field, current_filter, current_xbin, current_ybin,
+                                                                  current_xsize, current_ysize,
+                                                                  current_xorigin, current_yorigin,
+                                                                  current_flip_status)
 
                     # if we have a reference, use it. Otherwise store this image as the new reference frame
                     if self._ref_file is not None:
@@ -875,12 +1014,25 @@ class Voyager():
                         copyfile(self._ref_file, long_term_ref_file)
                         # set thw copied image to the reference in the database
                         vdb.set_reference_image(long_term_ref_file, current_field, current_filter,
-                                                current_xbin, current_ybin, current_flip_status)
+                                                current_xbin, current_ybin,
+                                                current_xsize, current_ysize,
+                                                current_xorigin, current_yorigin,
+                                                current_flip_status)
                         # set skip correction as new reference was just defined as this current image
                         do_correction = False
 
-                    # make this image the reference, update the last field/filter also
-                    self._donuts_ref = Donuts(self._ref_file, subtract_bkg=self.donuts_subtract_bkg)
+                    # make this image the reference
+                    if self._APPLY_IMAGE_MASK and self._full_frame_boolean_mask:
+                        image_pixel_mask = self.__extract_image_pixel_mask(current_xbin, current_ybin,
+                                                                           full_frame=False,
+                                                                           width_x=current_xsize,
+                                                                           height_y=current_ysize,
+                                                                           subf_start_x=current_xorigin,
+                                                                           subf_start_y=current_yorigin)
+                        self._donuts_ref = Donuts(self._ref_file, subtract_bkg=self.donuts_subtract_bkg,
+                                                  image_pixel_mask=image_pixel_mask)
+                    else:
+                        self._donuts_ref = Donuts(self._ref_file, subtract_bkg=self.donuts_subtract_bkg)
                 else:
                     logging.info("No change in observing sequence, donuts continuing as before...")
                     do_correction = True
@@ -890,6 +1042,10 @@ class Voyager():
                 self._last_filter = current_filter
                 self._last_xbin = current_xbin
                 self._last_ybin = current_ybin
+                self._last_xsize = current_xsize
+                self._last_ysize = current_ysize
+                self._last_xorigin = current_xorigin
+                self._last_yorigin = current_yorigin
                 self._last_flip_status = current_flip_status
 
                 # do the correction if required
@@ -899,7 +1055,7 @@ class Voyager():
                     logging.info(f"Raw shift measured: x:{shift.x.value:.2f} y:{shift.y.value:.2f}")
 
                     # process the shifts and add the results to the queue
-                    direction, duration = self.__process_guide_correction(shift)
+                    direction, duration = self.__process_guide_correction(shift, current_xbin, current_ybin)
 
                     # add the post-PID values to the results queue
                     self._results_queue.put((direction, duration))
@@ -1018,6 +1174,14 @@ class Voyager():
         continue_reading = True
         logging.debug("Starting read until delim...")
         while continue_reading:
+            # add emergency break on the message buffer
+            # seen issues with spamming thousands of [b'', b'' ...]
+            if len(message_buffer) > 10 or len(self.message_overflow) > 10:
+                logging.fatal("Problem with receive_until_delim, exiting")
+                logging.fatal(f"meassge_buffer: {message_buffer}")
+                logging.fatal(f"meassge_overflow: {self.message_overflow}")
+                sys.exit(ERROR_UNHANDLED)
+            # read the socket
             try:
                 message_raw = self.socket.recv(n_bytes)
             except s.timeout:
@@ -1471,7 +1635,9 @@ class Voyager():
 
         # take an image at the current location
         try:
-            message_shot = self._msg.camera_shot(shot_uuid, self._comms_id, self.calibration_exptime, "true", filename_host)
+            message_shot = self._msg.camera_shot(shot_uuid, self._comms_id, self.calibration_exptime,
+                                                 self.calibration_filter_index, self.calibration_binning,
+                                                 "true", filename_host)
             self.__send_two_way_message_to_voyager(message_shot)
             self._comms_id += 1
             self._image_id += 1
@@ -1479,7 +1645,14 @@ class Voyager():
             self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename_host}")
 
         # make the image we took the reference image
-        donuts_ref = Donuts(filename_cont, subtract_bkg=self.donuts_subtract_bkg)
+        if self._APPLY_IMAGE_MASK and self._full_frame_boolean_mask:
+            image_pixel_mask = self.__extract_image_pixel_mask(self.calibration_binning,
+                                                               self.calibration_binning,
+                                                               full_frame=True)
+            donuts_ref = Donuts(filename_cont, subtract_bkg=self.donuts_subtract_bkg,
+                                image_pixel_mask=image_pixel_mask)
+        else:
+            donuts_ref = Donuts(filename_cont, subtract_bkg=self.donuts_subtract_bkg)
 
         # loop over the 4 directions for the requested number of iterations
         for _ in range(self.calibration_n_iterations):
@@ -1503,7 +1676,9 @@ class Voyager():
                     filename_host = self.__resolve_host_path("calib", filename_cont)
 
                     shot_uuid = str(uuid.uuid4())
-                    message_shot = self._msg.camera_shot(shot_uuid, self._comms_id, self.calibration_exptime, "true", filename_host)
+                    message_shot = self._msg.camera_shot(shot_uuid, self._comms_id, self.calibration_exptime,
+                                                         self.calibration_filter_index, self.calibration_binning,
+                                                         "true", filename_host)
                     self.__send_two_way_message_to_voyager(message_shot)
                     self._comms_id += 1
                     self._image_id += 1
@@ -1516,7 +1691,14 @@ class Voyager():
                 logging.info(f"SHIFT: {direction} {magnitude}")
                 self._direction_store[i].append(direction)
                 self._scale_store[i].append(magnitude)
-                donuts_ref = Donuts(filename_cont, subtract_bkg=self.donuts_subtract_bkg)
+                if self._APPLY_IMAGE_MASK and self._full_frame_boolean_mask:
+                    image_pixel_mask = self.__extract_image_pixel_mask(self.calibration_binning,
+                                                                       self.calibration_binning,
+                                                                       full_frame=True)
+                    donuts_ref = Donuts(filename_cont, subtract_bkg=self.donuts_subtract_bkg,
+                                        image_pixel_mask=image_pixel_mask)
+                else:
+                    donuts_ref = Donuts(filename_cont, subtract_bkg=self.donuts_subtract_bkg)
 
         # now do some analysis on the run from above
         # check that the directions are the same every time for each orientation
@@ -1532,10 +1714,10 @@ class Voyager():
             line = f"{direc} {self._direction_store[direc]}\n"
             self.__append_to_file(self._calibration_results_path, line)
 
-        # now work out the ms/pix scales from the calbration run above
+        # now work out the ms/pix scales from the calbration run above, take into account binning too
         ratios = {}
         for direc in self._scale_store:
-            ratio = round(self.calibration_step_size_ms/np.average(self._scale_store[direc]), 2)
+            ratio = round(self.calibration_step_size_ms/np.average(self._scale_store[direc])/self.calibration_binning, 2)
             logging.info(f"{direc}: {ratio} ms/pixel")
             # store these for later
             ratios[direc] = ratio
@@ -1698,7 +1880,7 @@ class Voyager():
             yt = y
         return xt, yt
 
-    def __determine_direction_and_duration(self, x, y, cos_dec):
+    def __determine_direction_and_duration(self, x, y, cos_dec, xbin, ybin):
         """
         Take the correction in X and Y in pixels
         and convert it to a direction and duration object
@@ -1710,6 +1892,12 @@ class Voyager():
             X correction
         y : float
             Y correction
+        cos_dec : float
+            scaling coeff for RA
+        xbin : int
+            binning factor in x
+        ybin : int
+            binning factor in y
 
         Returns
         -------
@@ -1756,12 +1944,12 @@ class Voyager():
         # bake these final values into the direction/duration results
         direction = {"x": guide_direction_x,
                      "y": guide_direction_y}
-        duration = {"x": guide_time_x,
-                    "y": guide_time_y}
+        duration = {"x": guide_time_x * xbin,
+                    "y": guide_time_y * ybin}
 
         return direction, duration
 
-    def __process_guide_correction(self, shift):
+    def __process_guide_correction(self, shift, xbin, ybin):
         """
         Take a Donuts shift object. Analyse the x and y
         components. Compare them to the recent history of
@@ -1774,6 +1962,10 @@ class Voyager():
         shift : Donuts.shift object
             Contains the X and Y offset values for a
             recently analysed image
+        xbin : int
+            Level of image binning in x direction
+        ybin : int
+            Level of image binning in y direction
 
         Returns
         -------
@@ -1893,7 +2085,7 @@ class Voyager():
         vdb.log_shifts_to_db(shift_args)
 
         # convert correction into direction/duration objects
-        direction, duration = self.__determine_direction_and_duration(final_x, final_y, cos_dec)
+        direction, duration = self.__determine_direction_and_duration(final_x, final_y, cos_dec, xbin, ybin)
 
         # store the original pre-pid values in the buffer
         self._buff_x.append(pre_pid_x)

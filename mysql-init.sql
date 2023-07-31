@@ -7,6 +7,10 @@ CREATE TABLE IF NOT EXISTS autoguider_ref (
   filter text not null,
   xbin int(1) not null,
   ybin int(1) not null,
+  xsize int(6) not null,
+  ysize int(6) not null,
+  xorigin int(6) not null,
+  yorigin int(6) not null,
   flip_status int(1) not null,
   valid_from datetime not null,
   valid_until datetime

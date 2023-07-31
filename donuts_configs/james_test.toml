@@ -19,6 +19,15 @@ ra_keyword = "OBJCTRA"
 dec_keyword = "OBJCTDEC"
 xbin_keyword = "XBINNING"
 ybin_keyword = "YBINNING"
+xsize_keyword = "NAXIS1"
+ysize_keyword = "NAXIS2"
+xorigin_keyword = "XORGSUBF"
+yorigin_keyword = "YORGSUBF"
+
+# image masking - supply this to mask bad columns etc
+# remove this entry to skip image masking. This file must be stored
+# in the DonutsCalibration directory
+full_frame_boolean_mask_file = "full_frame_mask.fits"
 
 # logging info
 # level of logging detail, choices: "info" or "debug"
@@ -33,9 +42,15 @@ donuts_subtract_bkg = false
 # Change this section after calibration #
 #########################################
 
+# calibration settings
+calibration_filter_index = 0
+calibration_binning = 1
+
 # guiding characteristics
 ra_axis = "y"
+
 # if mount_type = "GEM" you need calibration data for East and West sides of meridian
+# Note: these are unbinnined calibrations and are rescaled internally if binning
 mount_type = "GEM"
 pixels_to_time_east = {"+x" = 58.12, "-x" = 57.53, "+y" = 46.2, "-y" = 46.18}
 pixels_to_time_west = {"+x" = 57.56, "-x" = 57.8, "+y" = 41.97, "-y" = 43.11}
