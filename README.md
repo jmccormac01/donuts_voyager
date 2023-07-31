@@ -78,6 +78,8 @@ Docker depends on the Windows Subsystem for Linux (WSL2.0) and this is only avai
    1. Next we need to edit the donuts config file for our new system:
       1. Copy the example ```james_test.toml``` file and edit the top section to set the paths to the data and FITS keywords etc
       1. Ensure that the final line of the ```Dockerfile``` is pointed at this new config file
+      1. Set the ```calibration_filter_index``` to the filter position (0, 1, ... N_filters) you'd liketo use for calibration. A broadband optical filter is suggested.
+      1. Set the ```calibration_binning``` level. For very large sensors a binning factor of 2 or 3 is suggested. For most small format devices (e.g. 1k x 1k or 2k x 2k) binning of 1 is fine.
       1. Set the ```ra_axis``` to ```x``` or ```y``` depending on the orientation of your camera.
       1. Set the telescope ```mount_type``` to ```FORK``` or ```GEM```.
       1. The ```guide_directions``` and ```pixels_to_time``` lines will be set after the initial on-sky calibration run
@@ -147,6 +149,70 @@ Voyager can start and stop donuts by calling the ```start.bat``` and ```stop.bat
 
    1. Add a call to an external script before an observing sequence. Point the external call at the ```start.bat``` script inside the ```donuts_voyager``` repository
    1. To automatically stop donuts after an observing sequence, add an external script call after the observing block. Point the external call at the ```stop.bat``` script in the ```donuts_voyager``` repository
+
+# Managing Reference Images
+
+If anything in your telescope changes (e.g. you remove and reinstall your camera), the long term reference images become invalid. Additionally, if a bad reference image is taken (e.g. a plane flies through the image), you will want to disable that reference.
+There are two helper scripts to simplify managing reference images. One quickly disbales a single reference image and the other diables all reference images. Below are instructions on using each.
+
+## Disable a Single Reference Image
+
+This script takes many arguments to target exactly a single reference image in the database. It can also take '%' wildcard symbols to signify all matching rows. See below for examples.
+
+   1. Open a terminal inside the ```voyager_donuts``` running container in Docker Desktop
+   1. Run ```python disable_reference_image.py -h`` to see the help file
+   ```
+▶ python disable_reference_image.py -h
+usage: Disable reference images [-h] [--filter FILTER] [--xbin XBIN] [--ybin YBIN]
+                                [--xsize XSIZE] [--ysize YSIZE] [--xorigin XORIGIN]
+                                [--yorigin YORIGIN] [--flip_status FLIP_STATUS]
+                                field
+
+positional arguments:
+  field                 name of field to disable
+
+options:
+  -h, --help            show this help message and exit
+  --filter FILTER       filter of field to disable
+  --xbin XBIN           x binning level of field to disable
+  --ybin YBIN           x binning level of field to disable
+  --xsize XSIZE         Image size x of field to disable
+  --ysize YSIZE         Image size y of field to disable
+  --xorigin XORIGIN     Image x origin of field to disable
+  --yorigin YORIGIN     Image y origin of field to disable
+  --flip_status FLIP_STATUS
+                        flip status of field to disable
+   ```
+   1. A value is required for each input in order to target the correct reference image.
+   1. However, you can supply a wildcard value (%) to match all values of a given parameter.
+   1. For example:
+      1. To disable all reference images for field "SP101" regardless of filter, binning etc
+      1. ```python disable_reference_image.py SP101 --filter % --xbin % --ybin % --xsize % --ysize % --xorigin % --yorigin % --flip_status %```
+      1. To disable all R band reference images for "SP101" regardless of the binning/windowing parameters:
+      1. ```python disable_reference_image.py SP101 --filter R --xbin % --ybin % --xsize % --ysize % --xorigin % --yorigin % --flip_status %```
+   1. To avoid accidental removal of references you must specify something for each parameter.
+   1. For reference, a copy of the mysql command is printed to screen before execution. e.g.
+   ```
+ python disable_reference_image.py SP101 --filter % --xbin % --ybin % --xsize % --ysize % --xorigin % --yorigin % --flip_status %
+
+ UPDATE autoguider_ref
+ SET valid_until='2023-07-31 13:52:08'
+ WHERE field='SP101'
+ AND filter LIKE '%'
+ AND xbin LIKE '%'
+ AND ybin LIKE '%'
+ AND xsize LIKE '%'
+ AND ysize LIKE '%'
+ AND xorigin LIKE '%'
+ AND yorigin LIKE '%'
+ AND flip_status LIKE '%'
+   ```
+
+## Disable All Reference Images
+
+   1. Open a terminal inside the ```voyager_donuts``` running container in Docker Desktop
+   1. Run ```python disable_all_reference_images.py --all`` to disable all reference images
+   1. Note, the ```--all``` is needed to confirm you want to do this (potentially dangerous) activity
 
 # Contributors
 
