@@ -1617,6 +1617,9 @@ class Voyager():
         self._direction_store = defaultdict(list)
         self._scale_store = defaultdict(list)
 
+        # get the mount status so we know which side to report config for if GEM
+        self._IS_GEM, self._last_flip_status = self.__get_mount_status()
+
         # set up calibration directory
         self._calibration_dir = vutils.get_data_dir(self.calibration_root, windows=False)
 
