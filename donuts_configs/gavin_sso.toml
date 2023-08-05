@@ -43,7 +43,7 @@ donuts_subtract_bkg = true
 #########################################
 
 # calibration settings
-calibration_filter_index = 0
+calibration_filter_index = 3
 calibration_binning = 3
 
 # guiding characteristics
