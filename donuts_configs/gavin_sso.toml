@@ -19,6 +19,15 @@ ra_keyword = "OBJCTRA"
 dec_keyword = "OBJCTDEC"
 xbin_keyword = "XBINNING"
 ybin_keyword = "YBINNING"
+xsize_keyword = "NAXIS1"
+ysize_keyword = "NAXIS2"
+xorigin_keyword = "XORGSUBF"
+yorigin_keyword = "YORGSUBF"
+
+# image masking - supply this to mask bad columns etc
+# remove this entry to skip image masking. This file must be stored
+# in the DonutsCalibration directory
+#full_frame_boolean_mask_file = "full_frame_mask.fits"
 
 # logging info
 # level of logging detail, choices: "info" or "debug"
@@ -33,10 +42,16 @@ donuts_subtract_bkg = true
 # Change this section after calibration #
 #########################################
 
+# calibration settings
+calibration_filter_index = 0
+calibration_binning = 3
+
 # guiding characteristics
 ra_axis = "y"
-pixels_to_time = {"+x" = 62.54, "-x" = 62.13, "+y" = 61.95, "-y" = 62.09}
-guide_directions = {"+y" = 2, "-y" = 3, "+x" = 1, "-x" = 0}
+
+mount_type = "FORK"
+pixels_to_time = {"+x" = 61.65, "-x" = 62.45, "+y" = 72.27, "-y" = 72.62}
+guide_directions = {"+y" = 3, "-y" = 2, "+x" = 0, "-x" = 1}
 
 ######################################################
 # DO NOT CHANGE INFO BELOW HERE UNLESS INSTRUCTED TO #
