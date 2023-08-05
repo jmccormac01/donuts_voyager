@@ -33,7 +33,7 @@ yorigin_keyword = "YORGSUBF"
 # level of logging detail, choices: "info" or "debug"
 logging_level = "debug"
 # location of log output, choices: "file" or "stdout"
-logging_location = "stddout"
+logging_location = "stdout"
 
 # donuts algorithm info
 donuts_subtract_bkg = true
