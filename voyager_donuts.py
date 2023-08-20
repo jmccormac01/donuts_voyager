@@ -35,6 +35,16 @@ from PID import PID
 # pylint: disable=too-many-lines
 # pylint: disable=too-many-instance-attributes
 # pylint: disable=broad-except
+# pylint: disable=redefined-outer-name
+
+# expected config keys
+expected_gem_keys = set(['pixels_to_time_east', 'pixels_to_time_west',
+                         'guide_directions_east', 'guide_directions_west'])
+expected_fork_keys = set(['pixels_to_time', 'guide_directions'])
+
+# some error codes when exiting
+ERROR_SOCKET, ERROR_MOUNT_TYPE, ERROR_STABILISE, ERROR_UNHANDLED, \
+    ERROR_FILE_MISSING = np.arange(5)
 
 def arg_parse():
     """
@@ -53,6 +63,18 @@ class DonutsStatus():
     Current status of Donuts guiding
     """
     CALIBRATING, GUIDING, IDLE, UNKNOWN = np.arange(4)
+
+class FlipStatus():
+    """
+    FlipStatus flags from Voyager
+    0 & 1 are from BEFORE flipping
+    2 is during flip, 3 is after, so 2 & 3 are considered AFTER
+    4 is for a FORK (ignore all flipping logic)
+    5 is an error
+
+    We remap these status flags here and add the UNKNOWN flag
+    """
+    BEFORE, AFTER, FORK, ERROR, UNKNOWN = np.arange(5)
 
 class Message():
     """
@@ -110,7 +132,7 @@ class Message():
         return message
 
     @staticmethod
-    def camera_shot(uid, idd, exptime, save_file, filename):
+    def camera_shot(uid, idd, exptime, filter_index, binning, save_file, filename):
         """
         Create a message object for taking an image
         with the CCD camera
@@ -126,6 +148,10 @@ class Message():
             unique ID for this command
         exptime : int
             exposure time of the image to be taken
+        filter_index : int
+            position id of calibration filter
+        binning : int
+            binning level in both directions
         save_file : boolean
             flag to save the file or not
         filename : string
@@ -143,14 +169,14 @@ class Message():
         message = {"method": "RemoteCameraShot",
                    "params": {"UID": uid,
                               "Expo": exptime,
-                              "Bin": 1,
+                              "Bin": binning,
                               "IsROI": "false",
                               "ROITYPE": 0,
                               "ROIX": 0,
                               "ROIY": 0,
                               "ROIDX": 0,
                               "ROIDY": 0,
-                              "FilterIndex": 3,
+                              "FilterIndex": filter_index,
                               "ExpoType": 0,
                               "SpeedIndex": 0,
                               "ReadoutIndex": 0,
@@ -195,6 +221,35 @@ class Message():
                               "RAText": ra,
                               "DECText": dec,
                               "Parallelized": "true"},
+                   "id": idd}
+        return message
+
+    @staticmethod
+    def get_mount_status(uid, idd):
+        """
+        Create a message object for polling mount status
+
+        Also return the response code that says things
+        went well. Typically 4
+
+        Parameters
+        ----------
+        uid : string
+            unique ID for this command
+        idd : int
+            unique ID for this command
+
+        Returns
+        -------
+        message : dict
+            JSON dumps ready dict for a remote mount status command
+
+        Raises
+        ------
+        None
+        """
+        message = {"method": "RemoteMountStatusGetInfo",
+                   "params": {"UID": uid},
                    "id": idd}
         return message
 
@@ -321,7 +376,16 @@ class Voyager():
         self.xbin_keyword = config['xbin_keyword']
         self.ybin_keyword = config['ybin_keyword']
         self.ra_axis = config['ra_axis']
+        self.xsize_keyword = config['xsize_keyword']
+        self.ysize_keyword = config['ysize_keyword']
+        self.xorigin_keyword = config['xorigin_keyword']
+        self.yorigin_keyword = config['yorigin_keyword']
         self._declination = None
+
+        # get type of mount
+        # if GEM we need to handle image flipping
+        self._IS_GEM = None
+        self._last_flip_status = None
 
         # keep track of current status
         self._status = DonutsStatus.UNKNOWN
@@ -363,12 +427,20 @@ class Voyager():
         self._direction_store = None
         self._scale_store = None
 
+        # set up calibration observations
+        self.calibration_filter_index = config['calibration_filter_index']
+        self.calibration_binning = config['calibration_binning']
+
         # add some places to keep track of reference images change overs
         self._ref_file = None
         self._last_field = None
         self._last_filter = None
         self._last_xbin = None
         self._last_ybin = None
+        self._last_xsize = None
+        self._last_ysize = None
+        self._last_xorigin = None
+        self._last_yorigin = None
         self._donuts_ref = None
 
         # set up the PID loop coeffs etc
@@ -405,8 +477,23 @@ class Voyager():
         self._images_to_stabilise = self.n_images_to_stabilise
 
         # calibrated pixels to time ratios and the directions
-        self.pixels_to_time = config['pixels_to_time']
-        self.guide_directions = config['guide_directions']
+        # new in GEM support, set these later once we know mount_type | flip status
+        self.pixels_to_time = None
+        self.guide_directions = None
+
+        # check if we want to do image masking?
+        try:
+            self.full_frame_boolean_mask_file = f"{self.calibration_root}/{config['full_frame_boolean_mask_file']}"
+            self._APPLY_IMAGE_MASK = True
+        except KeyError:
+            self.full_frame_boolean_mask_file = None
+            self._APPLY_IMAGE_MASK = False
+
+        # if masking, load the full frame mask
+        if self._APPLY_IMAGE_MASK:
+            self._full_frame_boolean_mask = self.__load_full_frame_boolean_mask()
+        else:
+            self._full_frame_boolean_mask = None
 
         # initialise all the things
         self.__initialise_guide_buffer()
@@ -416,6 +503,18 @@ class Voyager():
 
         # some donuts algorithm config
         self.donuts_subtract_bkg = config['donuts_subtract_bkg']
+
+    def __load_full_frame_boolean_mask(self):
+        """
+        Try loading a mask from disc
+        """
+        try:
+            with fits.open(self.full_frame_boolean_mask_file) as ff:
+                full_frame_mask = ff[0].data
+        except FileNotFoundError:
+            print(f"Mask file {self.full_frame_boolean_mask_file} is missing, exiting.")
+            sys.exit(ERROR_FILE_MISSING)
+        return full_frame_mask
 
     def __resolve_host_path(self, data_type, path):
         """
@@ -509,6 +608,69 @@ class Voyager():
 
         return cont_path
 
+    def __get_mount_status(self):
+        """
+        Ping the mount to see if it is a GEM
+        and what the status is. If it returns FORK
+        then we can ignore all the GEM logic
+        """
+        # check if GEM or Fork, if Fork we can skip things later
+        uuid_mount = str(uuid.uuid4())
+        message_mount = self._msg.get_mount_status(uuid_mount, self._comms_id)
+        # send mount status message
+        payload = self.__send_two_way_message_to_voyager(message_mount)
+        self._comms_id += 1
+
+        if payload['FlipStatus'] == 5:
+            logging.fatal("Cannot determine if mount is GEM or Fork, quitting!")
+            sys.exit(ERROR_MOUNT_TYPE)
+        elif payload['FlipStatus'] == 4:
+            logging.info("Voyager reports mount as FORK, ignoring all pier flip logic")
+            return False, FlipStatus.FORK
+        elif payload['FlipStatus'] in (0, 1):
+            logging.info("Voyager reports mount as GEM, currently BEFORE flip")
+            return True, FlipStatus.BEFORE
+        elif payload['FlipStatus'] in (2, 3):
+            logging.info("Voyager reports mount as GEM, currently AFTER flip")
+            return True, FlipStatus.AFTER
+        else:
+            logging.fatal("Got unhandled return from mount status")
+            sys.exit(ERROR_UNHANDLED)
+
+    def __update_guiding_configuration(self, is_gem, current_flip_status):
+        """
+        Update the guiding configuration for a FORK
+        or GEM mount. If GEM this is called after each
+        mount status update. If FORK this is set at the
+        beginning of a run only
+
+        Parameters
+        ----------
+        is_gem : boolean
+            is this a German Equatorial Mount?
+        current_flip_status : int
+            see FlipStatus class for options
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        None
+        """
+        if is_gem and current_flip_status == FlipStatus.BEFORE:
+            self.pixels_to_time = config['pixels_to_time_east']
+            self.guide_directions = config['guide_directions_east']
+        elif is_gem and current_flip_status == FlipStatus.AFTER:
+            self.pixels_to_time = config['pixels_to_time_west']
+            self.guide_directions = config['guide_directions_west']
+        elif not is_gem:
+            self.pixels_to_time = config['pixels_to_time']
+            self.guide_directions = config['guide_directions']
+        else:
+            pass
+
     def run(self):
         """
         Open a connection and maintain it with Voyager.
@@ -539,8 +701,13 @@ class Voyager():
         # keep it alive and listen for jobs
         self.__keep_socket_alive()
 
-        # set guiding statuse to IDLE
+        # set guiding status to IDLE
         self._status = DonutsStatus.IDLE
+
+        # get the mount status and type
+        self._IS_GEM, self._last_flip_status = self.__get_mount_status()
+        # update the guide config directions and scales now we know about the mount
+        self.__update_guiding_configuration(self._IS_GEM, self._last_flip_status)
 
         # loop until told to stop
         while 1:
@@ -672,6 +839,93 @@ class Voyager():
         else:
             return int(d) + float(m)/60. + float(s)/3600.
 
+    def __extract_image_pixel_mask(self, xbin, ybin, full_frame=False, width_x=0, height_y=0, \
+                                   subf_start_x=0, subf_start_y=0):
+        """
+        Take the full frame mask. Apply any binning to it, then
+        slice out any subframe currently applied to the science images
+
+        Parameters
+        ----------
+        xbin : int
+            binning level in x
+        ybin : int
+            binning level in y
+        full_frame : bool
+            force full frame mask return (binned or not)
+        width_x : int
+            width of image if selecting subframe
+        height_y : int
+            height of image if selecting subframe
+        subf_start_x : int
+            x origin of subframe
+        subf_start_y : int
+            y origin of subframe
+
+        Returns
+        -------
+        image_pixel_mask : array
+            boolean mask binned and/or subframed
+
+        Raises
+        ------
+        None
+        """
+        image_pixel_mask = self._full_frame_boolean_mask
+        # apply binning if not 1x1
+        if not xbin == ybin == 1:
+            image_pixel_mask = self.__bin_boolean_mask(image_pixel_mask, xbin, ybin)
+
+        # select subframe if defined
+        if full_frame:
+            return image_pixel_mask
+        else:
+            # slice out any subframe
+            image_pixel_mask = image_pixel_mask[subf_start_y: subf_start_y + height_y,
+                                                subf_start_x: subf_start_x + width_x]
+        return image_pixel_mask
+
+    @staticmethod
+    def __bin_boolean_mask(data, xbin, ybin):
+        """
+        Bin a boolean mask
+
+        Note:
+            We do a max in each cell, rather than
+            a sum to keep 0 | 1 in the result
+
+            Additional pixels that do not complete a
+            bin are ignored
+
+        Parameters
+        ----------
+        data : array
+            full frame boolean mask to bin
+        xbin : int
+            binning factor in x (across columns)
+        ybin : int
+            binning factor in y (across rows)
+
+        Returns
+        -------
+        y : array
+            binned boolean mask
+
+        Raises
+        ------
+        None
+        """
+        nrows, ncols = data.shape
+        n_binned_cols = ncols//xbin
+        n_binned_rows = nrows//ybin
+        x = np.zeros((nrows, n_binned_cols), dtype=np.uint16)
+        y = np.zeros((n_binned_rows, n_binned_cols), dtype=np.uint16)
+        for i in range(nrows):
+            x[i] = np.max(data[i][:n_binned_cols*xbin].reshape(n_binned_cols, xbin), axis=1)
+        for i in range(n_binned_cols):
+            y[:, i] = np.max(x[:, i][:n_binned_rows*ybin].reshape(n_binned_rows, ybin), axis=1)
+        return y
+
     def __guide_loop(self):
         """
         Analyse incoming images for guiding offsets.
@@ -702,6 +956,14 @@ class Voyager():
 
                 last_image = self._latest_guide_frame
 
+                # check if GEM
+                if self._IS_GEM:
+                    # get the mount status and check current flip status
+                    is_gem, current_flip_status = self.__get_mount_status()
+                    self.__update_guiding_configuration(is_gem, current_flip_status)
+                else:
+                    current_flip_status = FlipStatus.FORK
+
                 # check if we're still observing the same field
                 # pylint: disable=no-member
                 with fits.open(last_image, ignore_missing_end=True) as ff:
@@ -711,12 +973,21 @@ class Voyager():
                     current_xbin = ff[0].header[self.xbin_keyword]
                     current_ybin = ff[0].header[self.ybin_keyword]
                     declination = ff[0].header[self.dec_keyword]
+                    current_xsize = ff[0].header[self.xsize_keyword]
+                    current_ysize = ff[0].header[self.ysize_keyword]
+                    current_xorigin = ff[0].header[self.xorigin_keyword]
+                    current_yorigin = ff[0].header[self.yorigin_keyword]
                     self._declination = self.__dec_str_to_deg(declination)
                 # pylint: enable=no-member
 
                 # if something changes or we haven't started yet, sort out a reference image
                 if current_field != self._last_field or current_filter != self._last_filter or \
-                    current_xbin != self._last_xbin or current_ybin != self._last_ybin or self._donuts_ref is None:
+                    current_xbin != self._last_xbin or current_ybin != self._last_ybin or \
+                    current_xsize != self._last_xsize or current_ysize != self._last_ysize or \
+                    current_xorigin != self._last_xorigin or \
+                    current_yorigin != self._last_yorigin or \
+                    current_flip_status != self._last_flip_status or self._donuts_ref is None:
+                    logging.info("Detected change in observing sequence, reinitialising donuts...")
                     # reset PID loop to unstabilised state
                     self.__initialise_pid_loop(stabilised=False)
                     # reset the guide buffer
@@ -726,8 +997,10 @@ class Voyager():
 
                     # replacement block using database
                     # look for a reference image for this field, filter, binx and biny
-                    self._ref_file = vdb.get_reference_image_path(current_field, current_filter,
-                                                                  current_xbin, current_ybin)
+                    self._ref_file = vdb.get_reference_image_path(current_field, current_filter, current_xbin, current_ybin,
+                                                                  current_xsize, current_ysize,
+                                                                  current_xorigin, current_yorigin,
+                                                                  current_flip_status)
 
                     # if we have a reference, use it. Otherwise store this image as the new reference frame
                     if self._ref_file is not None:
@@ -737,16 +1010,31 @@ class Voyager():
                         self._ref_file = last_image
                         ref_filename = self._ref_file.split('/')[-1]
                         # copy it to the special storage area
-                        copyfile(self._ref_file, f"{self.reference_root}/{ref_filename}")
+                        long_term_ref_file = f"{self.reference_root}/{ref_filename}"
+                        copyfile(self._ref_file, long_term_ref_file)
                         # set thw copied image to the reference in the database
-                        vdb.set_reference_image(self._ref_file, current_field, current_filter,
-                                                current_xbin, current_ybin)
+                        vdb.set_reference_image(long_term_ref_file, current_field, current_filter,
+                                                current_xbin, current_ybin,
+                                                current_xsize, current_ysize,
+                                                current_xorigin, current_yorigin,
+                                                current_flip_status)
                         # set skip correction as new reference was just defined as this current image
                         do_correction = False
 
-                    # make this image the reference, update the last field/filter also
-                    self._donuts_ref = Donuts(self._ref_file, subtract_bkg=self.donuts_subtract_bkg)
+                    # make this image the reference
+                    if self._APPLY_IMAGE_MASK and self._full_frame_boolean_mask is not None:
+                        image_pixel_mask = self.__extract_image_pixel_mask(current_xbin, current_ybin,
+                                                                           full_frame=False,
+                                                                           width_x=current_xsize,
+                                                                           height_y=current_ysize,
+                                                                           subf_start_x=current_xorigin,
+                                                                           subf_start_y=current_yorigin)
+                        self._donuts_ref = Donuts(self._ref_file, subtract_bkg=self.donuts_subtract_bkg,
+                                                  image_pixel_mask=image_pixel_mask)
+                    else:
+                        self._donuts_ref = Donuts(self._ref_file, subtract_bkg=self.donuts_subtract_bkg)
                 else:
+                    logging.info("No change in observing sequence, donuts continuing as before...")
                     do_correction = True
 
                 # update the last field/filter values
@@ -754,6 +1042,11 @@ class Voyager():
                 self._last_filter = current_filter
                 self._last_xbin = current_xbin
                 self._last_ybin = current_ybin
+                self._last_xsize = current_xsize
+                self._last_ysize = current_ysize
+                self._last_xorigin = current_xorigin
+                self._last_yorigin = current_yorigin
+                self._last_flip_status = current_flip_status
 
                 # do the correction if required
                 if do_correction:
@@ -802,7 +1095,7 @@ class Voyager():
             logging.fatal('Voyager socket connect failed!')
             logging.fatal('Check the application interface is running!')
             traceback.print_exc()
-            sys.exit(1)
+            sys.exit(ERROR_SOCKET)
 
     def __close_socket(self):
         """
@@ -862,53 +1155,6 @@ class Voyager():
 
         return sent
 
-    def __receive(self, n_bytes=2048):
-        """
-        Receive a message of n_bytes in length from Voyager
-
-        Parameters
-        ----------
-        n_bytes : int, optional
-            Number of bytes to read from socket
-            default = 2048
-
-        Returns
-        -------
-        message : dict
-            json parsed response from Voyager
-
-        Raises
-        ------
-        None
-        """
-        # NOTE original code, we have JSON decoding errors, trying to figure it out
-        #try:
-        #    message = json.loads(self.socket.recv(n_bytes))
-        #except s.timeout:
-        #    message = {}
-        #return message
-
-        # load the raw string
-        try:
-            message_raw = self.socket.recv(n_bytes)
-        except s.timeout:
-            message_raw = ""
-
-        # spit out the raw message
-        logging.debug(f"__receive: message_raw={message_raw}")
-
-        # unpack it into a json object
-        if message_raw != "":
-            # NOTE sometimes a message is truncated, try to stop it crashing...
-            try:
-                message = json.loads(message_raw)
-            except json.decoder.JSONDecodeError:
-                message = {}
-        else:
-            message = {}
-
-        return message
-
     def __receive_until_delim(self, delim=b'\r\n'):
         """
         """
@@ -926,8 +1172,16 @@ class Voyager():
         logging.debug(f"Reset message overflow to {self.message_overflow}")
 
         continue_reading = True
-        logging.info("Starting read until delim...")
+        logging.debug("Starting read until delim...")
         while continue_reading:
+            # add emergency break on the message buffer
+            # seen issues with spamming thousands of [b'', b'' ...]
+            if len(message_buffer) > 10 or len(self.message_overflow) > 10:
+                logging.fatal("Problem with receive_until_delim, exiting")
+                logging.fatal(f"meassge_buffer: {message_buffer}")
+                logging.fatal(f"meassge_overflow: {self.message_overflow}")
+                sys.exit(ERROR_UNHANDLED)
+            # read the socket
             try:
                 message_raw = self.socket.recv(n_bytes)
             except s.timeout:
@@ -950,9 +1204,9 @@ class Voyager():
                 message_buffer.append(message_raw)
                 logging.debug(f"Message buffer: {message_buffer}")
 
-        logging.info("Done reading until delim...")
+        logging.debug("Done reading until delim...")
         message_str = b''.join(message_buffer)
-        logging.info(f"Final message string: {message_str}")
+        logging.debug(f"Final message string: {message_str}")
         return json.loads(message_str)
 
     def __keep_socket_alive(self):
@@ -1149,6 +1403,10 @@ class Voyager():
         # add the OK status we want to see returned
         response = Response(uid, idd, self._msg.OK)
 
+        # initialise the payload that will contain param_ret data
+        # needed for commands that return data we care about
+        payload = None
+
         # loop until both responses are received
         cb_loop_count = 0
         while not response.uid_recv:
@@ -1204,7 +1462,7 @@ class Voyager():
 
                 if rec['Event'] == "RemoteActionResult":
                     logging.debug(f"RECEIVED: {rec}")
-                    rec_uid, result, *_ = self.__parse_remote_action_result(rec)
+                    rec_uid, result, _, param_ret = self.__parse_remote_action_result(rec)
 
                     # check we have a response for the thing we want
                     if rec_uid == uid:
@@ -1217,6 +1475,7 @@ class Voyager():
                             logging.debug(f"Command uid: {uid} returned correctly")
                             # add the response, regardless if it's good or bad, so we can end this loop
                             response.uid_received(result)
+                            payload = param_ret
                     else:
                         logging.warning(f"Waiting for uid: {uid}, ignoring response for uid: {rec_uid}")
 
@@ -1245,6 +1504,9 @@ class Voyager():
         # check was everything ok and raise an exception if not
         if not response.all_ok():
             raise Exception(f"ERROR: Could not send message {msg_str}")
+
+        # return the payload
+        return payload
 
     def __calibration_filename(self, direction, pulse_time):
         """
@@ -1359,6 +1621,9 @@ class Voyager():
         self._direction_store = defaultdict(list)
         self._scale_store = defaultdict(list)
 
+        # get the mount status so we know which side to report config for if GEM
+        self._IS_GEM, self._last_flip_status = self.__get_mount_status()
+
         # set up calibration directory
         self._calibration_dir = vutils.get_data_dir(self.calibration_root, windows=False)
 
@@ -1377,7 +1642,9 @@ class Voyager():
 
         # take an image at the current location
         try:
-            message_shot = self._msg.camera_shot(shot_uuid, self._comms_id, self.calibration_exptime, "true", filename_host)
+            message_shot = self._msg.camera_shot(shot_uuid, self._comms_id, self.calibration_exptime,
+                                                 self.calibration_filter_index, self.calibration_binning,
+                                                 "true", filename_host)
             self.__send_two_way_message_to_voyager(message_shot)
             logging.info(f"CALIB: sending message_shot: {message_shot}")
             self._comms_id += 1
@@ -1387,7 +1654,14 @@ class Voyager():
             logging.error(f"ERROR CALIB: failed to send message_shot: {message_shot}")
 
         # make the image we took the reference image
-        donuts_ref = Donuts(filename_cont, subtract_bkg=self.donuts_subtract_bkg)
+        if self._APPLY_IMAGE_MASK and self._full_frame_boolean_mask is not None:
+            image_pixel_mask = self.__extract_image_pixel_mask(self.calibration_binning,
+                                                               self.calibration_binning,
+                                                               full_frame=True)
+            donuts_ref = Donuts(filename_cont, subtract_bkg=self.donuts_subtract_bkg,
+                                image_pixel_mask=image_pixel_mask)
+        else:
+            donuts_ref = Donuts(filename_cont, subtract_bkg=self.donuts_subtract_bkg)
 
         # loop over the 4 directions for the requested number of iterations
         for _ in range(self.calibration_n_iterations):
@@ -1413,7 +1687,9 @@ class Voyager():
                     filename_host = self.__resolve_host_path("calib", filename_cont)
 
                     shot_uuid = str(uuid.uuid4())
-                    message_shot = self._msg.camera_shot(shot_uuid, self._comms_id, self.calibration_exptime, "true", filename_host)
+                    message_shot = self._msg.camera_shot(shot_uuid, self._comms_id, self.calibration_exptime,
+                                                         self.calibration_filter_index, self.calibration_binning,
+                                                         "true", filename_host)
                     self.__send_two_way_message_to_voyager(message_shot)
                     logging.info(f"CALIB: sending message_shot: {message_shot}")
                     self._comms_id += 1
@@ -1428,24 +1704,37 @@ class Voyager():
                 logging.info(f"SHIFT: {direction} {magnitude}")
                 self._direction_store[i].append(direction)
                 self._scale_store[i].append(magnitude)
-                donuts_ref = Donuts(filename_cont, subtract_bkg=self.donuts_subtract_bkg)
+                if self._APPLY_IMAGE_MASK and self._full_frame_boolean_mask is not None:
+                    image_pixel_mask = self.__extract_image_pixel_mask(self.calibration_binning,
+                                                                       self.calibration_binning,
+                                                                       full_frame=True)
+                    donuts_ref = Donuts(filename_cont, subtract_bkg=self.donuts_subtract_bkg,
+                                        image_pixel_mask=image_pixel_mask)
+                else:
+                    donuts_ref = Donuts(filename_cont, subtract_bkg=self.donuts_subtract_bkg)
 
         # now do some analysis on the run from above
         # check that the directions are the same every time for each orientation
+        skip_config_lines = False
         for direc in self._direction_store:
             logging.info(self._direction_store[direc])
             if len(set(self._direction_store[direc])) != 1:
-                logging.error(f"ERROR CALIB: PROBLEM WITH CALIBRATED DIRECTION {self._direction_store[direc]}")
+                logging.error(f"ERROR: PROBLEM WITH CALIBRATED DIRECTION {self._direction_store[direc]}")
+                skip_config_lines = True
+
             logging.info(f"{direc}: {self._direction_store[direc][0]}")
 
             # write out the direction_store contents for easy finding
             line = f"{direc} {self._direction_store[direc]}\n"
             self.__append_to_file(self._calibration_results_path, line)
 
-        # now work out the ms/pix scales from the calbration run above
+        # now work out the ms/pix scales from the calbration run above, take into account binning too
+        ratios = {}
         for direc in self._scale_store:
-            ratio = self.calibration_step_size_ms/np.average(self._scale_store[direc])
-            logging.info(f"{direc}: {ratio:.2f} ms/pixel")
+            ratio = round(self.calibration_step_size_ms/np.average(self._scale_store[direc])/self.calibration_binning, 2)
+            logging.info(f"{direc}: {ratio} ms/pixel")
+            # store these for later
+            ratios[direc] = ratio
 
             # write out the scale_store contents for easy finding
             line = f"{direc}: {self._scale_store[direc]}\n"
@@ -1454,6 +1743,35 @@ class Voyager():
             # write out the average correction too
             line = f"{direc}: {ratio:.2f} ms/pixel\n"
             self.__append_to_file(self._calibration_results_path, line)
+
+        # write out directly the lines that need to go into the config .toml file
+        # but only if there were no errors
+        if not skip_config_lines:
+            if self._IS_GEM and self._last_flip_status == 0:
+                pixels_to_time_line = "pixels_to_time_east = {"
+                guide_directions_line = "guide_directions_east = {"
+            elif self._IS_GEM and self._last_flip_status == 1:
+                pixels_to_time_line = "pixels_to_time_west = {"
+                guide_directions_line = "guide_directions_west = {"
+            else:
+                pixels_to_time_line = "pixels_to_time = {"
+                guide_directions_line = "guide_directions = {"
+
+            for direc in self._scale_store:
+                pixels_to_time_line += f'\"{self._direction_store[direc][0]}\" = {ratios[direc]}, '
+                guide_directions_line += f'\"{self._direction_store[direc][0]}\" = {direc}, '
+
+            # remove the extra ', ' and add a closing brace and a newline character
+            pixels_to_time_line = pixels_to_time_line[:-2] + "}\n"
+            guide_directions_line = guide_directions_line[:-2] + "}\n"
+
+            self.__append_to_file(self._calibration_results_path, "\nCopy the lines below into the .toml config file\n")
+            self.__append_to_file(self._calibration_results_path, "Be sure to remove any conflicting calibration data\n")
+            self.__append_to_file(self._calibration_results_path, pixels_to_time_line)
+            self.__append_to_file(self._calibration_results_path, guide_directions_line)
+        else:
+            self.__append_to_file(self._calibration_results_path, "\nPROBLEM WITH CALIBRATED DIRECTIONS, SKIPPED SUMMARY LINES\n")
+            self.__append_to_file(self._calibration_results_path, "SEE REPORT ABOVE FOR CAUSE OF ISSUE\n")
 
         # print out the storage areas for reference in case some bad measurements were made
         for direc in self._direction_store:
@@ -1720,7 +2038,7 @@ class Voyager():
             logging.error(f"We've been trying to stabilise >{self.n_images_to_stabilise} images")
             logging.error("There appears to be an error, quiting donuts")
             self.__send_donuts_message_to_voyager("DonutsRecenterError", "Failed to stabilise guiding")
-            sys.exit(1)
+            sys.exit(ERROR_STABILISE)
         else:
             pass
 
@@ -1824,6 +2142,26 @@ if __name__ == "__main__":
         logging.basicConfig(filename=log_file_path,
                             level=level,
                             format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
+
+    # sanity check mount type before continuing
+    if 'mount_type' in config:
+        if config['mount_type'] == "GEM":
+            # confirm we have east and west keys by determining overlap of keys
+            if len(set(config) & expected_gem_keys) != len(expected_gem_keys):
+                logging.fatal(f"Need both east and west calibration params {expected_gem_keys} for a GEM mount, exiting")
+                sys.exit(ERROR_MOUNT_TYPE)
+        elif config['mount_type'] == "FORK":
+            if len(set(config) & expected_fork_keys) != len(expected_fork_keys):
+                logging.fatal(f"Need calibration params {expected_fork_keys} for a FORK mount, exiting")
+                sys.exit(ERROR_MOUNT_TYPE)
+        else:
+            logging.fatal("Parameter 'mount_type' must be FORK or GEM, exiting")
+            sys.exit(ERROR_MOUNT_TYPE)
+    # assume fork, check for fork keys
+    else:
+        if len(set(config) & expected_fork_keys) != len(expected_fork_keys):
+            logging.fatal(f"Need calibration params {expected_fork_keys} for a FORK mount, exiting")
+            sys.exit(ERROR_MOUNT_TYPE)
 
     # set up Voyager/Donuts
     voyager = Voyager(config)

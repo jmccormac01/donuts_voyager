@@ -22,7 +22,8 @@ def db_cursor(host='127.0.0.1', port=3306, user='donuts',
             yield cur
         conn.commit()
 
-def get_reference_image_path(field, filt, xbin, ybin):
+def get_reference_image_path(field, filt, xbin, ybin, xsize, ysize,
+                             xorigin, yorigin, flip_status):
     """
     Look in the database for the current
     field/filter reference image
@@ -37,6 +38,17 @@ def get_reference_image_path(field, filt, xbin, ybin):
         level of image binning in x direction
     ybin : int
         level of image binning in y direction
+    xsize : int
+        size of binned image in x direction
+    ysize : int
+        size of binned image in y direction
+    xorigin : int
+        start of binned image in x direction
+    yorigin : int
+        start of binned image in y direction
+    flip_status : int
+        mount orientation
+        see Voyager FlipStatus flag in RemoteMountStatusGetInfo
 
     Returns
     -------
@@ -56,10 +68,15 @@ def get_reference_image_path(field, filt, xbin, ybin):
         AND filter = %s
         AND xbin = %s
         AND ybin = %s
+        AND xsize = %s
+        AND ysize = %s
+        AND xorigin = %s
+        AND yorigin = %s
+        AND flip_status = %s
         AND valid_from < %s
         AND valid_until IS NULL
         """
-    qry_args = (field, filt, xbin, ybin, tnow)
+    qry_args = (field, filt, xbin, ybin, xsize, ysize, xorigin, yorigin, flip_status, tnow)
 
     with db_cursor() as cur:
         cur.execute(qry, qry_args)
@@ -73,7 +90,8 @@ def get_reference_image_path(field, filt, xbin, ybin):
         ref_image = result[0]
     return ref_image
 
-def set_reference_image(ref_image_path, field, filt, xbin, ybin):
+def set_reference_image(ref_image_path, field, filt, xbin, ybin, xsize, ysize,
+                        xorigin, yorigin, flip_status):
     """
     Set a new image as a reference in the database
 
@@ -89,6 +107,17 @@ def set_reference_image(ref_image_path, field, filt, xbin, ybin):
         level of image binning in x direction
     ybin : int
         level of image binning in y direction
+    xsize : int
+        size of binned image in x direction
+    ysize : int
+        size of binned image in y direction
+    xorigin : int
+        start of binned image in x direction
+    yorigin : int
+        start of binned image in y direction
+    flip_status : int
+        mount orientation
+        see Voyager FlipStatus flag in RemoteMountStatusGetInfo
 
     Returns
     -------
@@ -100,11 +129,13 @@ def set_reference_image(ref_image_path, field, filt, xbin, ybin):
     tnow = datetime.utcnow().isoformat().split('.')[0].replace('T', ' ')
     qry = """
         INSERT INTO autoguider_ref
-        (ref_image_path, field, filter, xbin, ybin, valid_from)
+        (ref_image_path, field, filter, xbin, ybin, xsize, ysize,
+        xorigin, yorigin, flip_status, valid_from)
         VALUES
-        (%s, %s, %s, %s, %s, %s)
+        (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
-    qry_args = (ref_image_path, field, filt, xbin, ybin, tnow)
+    qry_args = (ref_image_path, field, filt, xbin, ybin, xsize, ysize,
+                xorigin, yorigin, flip_status, tnow)
     with db_cursor() as cur:
         cur.execute(qry, qry_args)
         logging.debug(f"DB: {qry}")

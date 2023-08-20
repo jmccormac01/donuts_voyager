@@ -7,6 +7,11 @@ CREATE TABLE IF NOT EXISTS autoguider_ref (
   filter text not null,
   xbin int(1) not null,
   ybin int(1) not null,
+  xsize int(6) not null,
+  ysize int(6) not null,
+  xorigin int(6) not null,
+  yorigin int(6) not null,
+  flip_status int(1) not null,
   valid_from datetime not null,
   valid_until datetime
 );
@@ -31,6 +36,8 @@ CREATE TABLE IF NOT EXISTS autoguider_log (
 );
 
 CREATE USER 'donuts'@'%';
-GRANT SELECT,INSERT ON donuts.autoguider_ref TO 'donuts'@'%';
-GRANT SELECT,INSERT ON donuts.autoguider_log TO 'donuts'@'%';
+GRANT ALL PRIVILEGES ON donuts.autoguider_ref TO 'donuts'@'%' WITH GRANT OPTION;
+GRANT ALL PRIVILEGES ON donuts.autoguider_log TO 'donuts'@'%' WITH GRANT OPTION;
+GRANT ALL PRIVILEGES ON donuts.autoguider_ref TO 'donuts'@'localhost' WITH GRANT OPTION;
+GRANT ALL PRIVILEGES ON donuts.autoguider_log TO 'donuts'@'localhost' WITH GRANT OPTION;
 FLUSH PRIVILEGES;

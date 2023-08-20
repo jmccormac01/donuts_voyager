@@ -6,10 +6,10 @@
 host = "DESKTOP-CNTF3JR"
 
 # host machine data paths, ensure these folders exist
-calibration_root_host = "\\192.168.1.145\jmcc\Public\DonutsCalibration"
-logging_root_host = "\\192.168.1.145\jmcc\Public\DonutsLog"
-data_root_host = "\\192.168.1.145\jmcc\Public"
-reference_root_host = "\\192.168.1.145\jmcc\Public\DonutsReference"
+calibration_root_host = "C:\\User\\user\\Documents\\Voyager\\DonutsCalibration"
+logging_root_host = "C:\\User\\user\\Documents\\Voyager\\DonutsLog"
+data_root_host = "C:\\User\\user\\Documents\\Voyager\\DonutsData"
+reference_root_host = "C:\\User\\user\\Documents\\Voyager\\DonutsReference"
 
 # fits image characteristics
 image_extension = ".FIT"
@@ -19,6 +19,15 @@ ra_keyword = "OBJCTRA"
 dec_keyword = "OBJCTDEC"
 xbin_keyword = "XBINNING"
 ybin_keyword = "YBINNING"
+xsize_keyword = "NAXIS1"
+ysize_keyword = "NAXIS2"
+xorigin_keyword = "XORGSUBF"
+yorigin_keyword = "YORGSUBF"
+
+# image masking - supply this to mask bad columns etc
+# remove this entry to skip image masking. This file must be stored
+# in the DonutsCalibration directory
+full_frame_boolean_mask_file = "full_frame_mask.fits"
 
 # logging info
 # level of logging detail, choices: "info" or "debug"
@@ -27,21 +36,35 @@ logging_level = "debug"
 logging_location = "stdout"
 
 # donuts algorithm info
-donuts_subtract_bkg = true
+donuts_subtract_bkg = false
 
 #########################################
 # Change this section after calibration #
 #########################################
 
+# calibration settings
+calibration_filter_index = 0
+calibration_binning = 1
+
 # guiding characteristics
 ra_axis = "y"
-pixels_to_time = {"+x" = 92.98, "-x" = 94.49, "+y" = 93.65, "-y" = 92.57}
-guide_directions = {"+y" = 3, "-y" = 2, "+x" = 1, "-x" = 0}
+
+# if mount_type = "GEM" you need calibration data for East and West sides of meridian
+# Note: these are unbinnined calibrations and are rescaled internally if binning
+mount_type = "GEM"
+pixels_to_time_east = {"+x" = 58.12, "-x" = 57.53, "+y" = 46.2, "-y" = 46.18}
+pixels_to_time_west = {"+x" = 57.56, "-x" = 57.8, "+y" = 41.97, "-y" = 43.11}
+guide_directions_east = {"+y" = 0, "-y" = 1, "+x" = 2, "-x" = 3}
+guide_directions_west = {"+y" = 1, "-y" = 0, "+x" = 3, "-x" = 2}
+# if mount_type = "FORK" or mount_type is not supplied (FORK assumed)
+# you need only one set of config parameters with same syntax as before GEM support was added
+#mount_type = "FORK"
+#pixels_to_time = {"+x" = 92.98, "-x" = 94.49, "+y" = 93.65, "-y" = 92.57}
+#guide_directions = {"+y" = 3, "-y" = 2, "+x" = 1, "-x" = 0}
 
 ######################################################
 # DO NOT CHANGE INFO BELOW HERE UNLESS INSTRUCTED TO #
 ######################################################
-
 # voyager info
 socket_ip = "host.docker.internal"
 socket_port = 5950
