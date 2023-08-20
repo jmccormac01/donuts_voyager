@@ -966,7 +966,7 @@ class Voyager():
 
                 # check if we're still observing the same field
                 # pylint: disable=no-member
-                with fits.open(last_image) as ff:
+                with fits.open(last_image, ignore_missing_end=True) as ff:
                     # current field and filter?
                     current_filter = ff[0].header[self.filter_keyword]
                     current_field = ff[0].header[self.field_keyword]
@@ -1601,6 +1601,10 @@ class Voyager():
         to determine the shift and calibrate the pulse
         guide command.
 
+        NOTE: we assume that the calibration is done in 1x1
+        binning, then if binning is used the values are scaled
+        accordingly.
+
         Parameters
         ----------
         None
@@ -1642,10 +1646,12 @@ class Voyager():
                                                  self.calibration_filter_index, self.calibration_binning,
                                                  "true", filename_host)
             self.__send_two_way_message_to_voyager(message_shot)
+            logging.info(f"CALIB: sending message_shot: {message_shot}")
             self._comms_id += 1
             self._image_id += 1
         except Exception:
             self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename_host}")
+            logging.error(f"ERROR CALIB: failed to send message_shot: {message_shot}")
 
         # make the image we took the reference image
         if self._APPLY_IMAGE_MASK and self._full_frame_boolean_mask is not None:
@@ -1666,10 +1672,12 @@ class Voyager():
                     message_pg = self._msg.pulse_guide(uuid_i, self._comms_id, i, self.calibration_step_size_ms)
                     # send pulse guide command in direction i
                     self.__send_two_way_message_to_voyager(message_pg)
+                    logging.info(f"CALIB: sending message_pg: {message_pg}")
                     self._comms_id += 1
                 except Exception:
                     # send a recentering error
                     self.__send_donuts_message_to_voyager("DonutsRecenterError", f"Failed to PulseGuide {i} {self.calibration_step_size_ms}")
+                    logging.error(f"ERROR CALIB: failed to send message_pg: {message_pg}")
                     traceback.print_exc()
 
                 # take an image
@@ -1683,10 +1691,12 @@ class Voyager():
                                                          self.calibration_filter_index, self.calibration_binning,
                                                          "true", filename_host)
                     self.__send_two_way_message_to_voyager(message_shot)
+                    logging.info(f"CALIB: sending message_shot: {message_shot}")
                     self._comms_id += 1
                     self._image_id += 1
                 except Exception:
                     self.__send_donuts_message_to_voyager("DonutsCalibrationError", f"Failed to take image {filename_host}")
+                    logging.error(f"ERROR CALIB: failed to send message_shot: {message_shot}")
 
                 # measure the offset and update the reference image
                 shift = donuts_ref.measure_shift(filename_cont)
@@ -1711,6 +1721,7 @@ class Voyager():
             if len(set(self._direction_store[direc])) != 1:
                 logging.error(f"ERROR: PROBLEM WITH CALIBRATED DIRECTION {self._direction_store[direc]}")
                 skip_config_lines = True
+
             logging.info(f"{direc}: {self._direction_store[direc][0]}")
 
             # write out the direction_store contents for easy finding
@@ -1945,6 +1956,8 @@ class Voyager():
             guide_direction_y = self.guide_directions["+y"]
 
         # bake these final values into the direction/duration results
+        # here we scale the values by xbin and ybin, assuming that calibration
+        # was done on binning 1x1
         direction = {"x": guide_direction_x,
                      "y": guide_direction_y}
         duration = {"x": guide_time_x * xbin,
