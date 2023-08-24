@@ -495,6 +495,12 @@ class Voyager():
         else:
             self._full_frame_boolean_mask = None
 
+        # check if we want to force multi-colour reference images
+        try:
+            self.multicolour_references = config['mulitcolour_references']
+        except KeyError:
+            self.multicolour_references = False
+
         # initialise all the things
         self.__initialise_guide_buffer()
 
@@ -967,8 +973,11 @@ class Voyager():
                 # check if we're still observing the same field
                 # pylint: disable=no-member
                 with fits.open(last_image, ignore_missing_end=True) as ff:
-                    # current field and filter?
-                    current_filter = ff[0].header[self.filter_keyword]
+                    # current field, filter, windowing and binning
+                    if self.multicolour_references:
+                        current_filter = "multi"
+                    else:
+                        current_filter = ff[0].header[self.filter_keyword]
                     current_field = ff[0].header[self.field_keyword]
                     current_xbin = ff[0].header[self.xbin_keyword]
                     current_ybin = ff[0].header[self.ybin_keyword]

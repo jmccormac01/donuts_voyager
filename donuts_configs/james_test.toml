@@ -29,6 +29,10 @@ yorigin_keyword = "YORGSUBF"
 # in the DonutsCalibration directory
 full_frame_boolean_mask_file = "full_frame_mask.fits"
 
+# multicolour reference images?
+# enable this if you want to force a single colour reference image for all
+multicolour_references = true
+
 # logging info
 # level of logging detail, choices: "info" or "debug"
 logging_level = "debug"
