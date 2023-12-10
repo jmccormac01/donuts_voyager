@@ -31,9 +31,9 @@ yorigin_keyword = "YORGSUBF"
 
 # logging info
 # level of logging detail, choices: "info" or "debug"
-logging_level = "debug"
+logging_level = "info"
 # location of log output, choices: "file" or "stdout"
-logging_location = "stdout"
+logging_location = "file"
 
 # donuts algorithm info
 donuts_subtract_bkg = true
@@ -50,8 +50,10 @@ calibration_binning = 3
 ra_axis = "y"
 
 mount_type = "FORK"
-pixels_to_time = {"+x" = 61.65, "-x" = 62.45, "+y" = 72.27, "-y" = 72.62}
-guide_directions = {"+y" = 3, "-y" = 2, "+x" = 0, "-x" = 1}
+#pixels_to_time = {"+x" = 61.65, "-x" = 62.45, "+y" = 72.27, "-y" = 72.62}
+#guide_directions = {"+y" = 3, "-y" = 2, "+x" = 0, "-x" = 1}
+pixels_to_time = {"+y" = 26.01, "-y" = 26.13, "+x" = 26.03, "-x" = 25.96}
+guide_directions = {"+y" = 0, "-y" = 1, "+x" = 2, "-x" = 3}
 
 ######################################################
 # DO NOT CHANGE INFO BELOW HERE UNLESS INSTRUCTED TO #
