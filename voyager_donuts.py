@@ -504,6 +504,9 @@ class Voyager():
         # some donuts algorithm config
         self.donuts_subtract_bkg = config['donuts_subtract_bkg']
 
+        # initialize a store for the shift object
+        self.__shift_value = None
+
     def __load_full_frame_boolean_mask(self):
         """
         Try loading a mask from disc
@@ -788,6 +791,10 @@ class Voyager():
 
                                     # send a DonutsRecenterDone message
                                     self.__send_donuts_message_to_voyager("DonutsRecenterDone")
+
+                                    # send a DonutsRecenterInformation message with guidex/guidey values
+                                    # check __determine_shift_direction_and_magnitude could be useful
+                                    self.__send_donuts_message_with_guide_values_to_voyager()
                                 except Exception:
                                     # send a recentering error
                                     self.__send_donuts_message_to_voyager("DonutsRecenterError", f"Failed to PulseGuide {last_image}")
@@ -1053,6 +1060,9 @@ class Voyager():
                     # work out shift here
                     shift = self._donuts_ref.measure_shift(last_image)
                     logging.info(f"Raw shift measured: x:{shift.x.value:.2f} y:{shift.y.value:.2f}")
+
+                    # store the shift information
+                    self.__shift_value = shift
 
                     # process the shifts and add the results to the queue
                     direction, duration = self.__process_guide_correction(shift, current_xbin, current_ybin)
@@ -1336,6 +1346,47 @@ class Voyager():
                    "Inst": self.inst}
         if error is not None:
             message['DonutsError'] = error
+
+        # send the command
+        msg_str = json.dumps(message) + "\r\n"
+        _ = self.__send(msg_str)
+
+    def __send_donuts_message_with_guide_values_to_voyager(self):
+        """
+        Send guide error values (in pixels) to Voyager after a successful
+        recentering. The guide error values are recovered from the
+        self.__shift_value object:
+
+        guidex : float
+            pixels to guide in x direction
+        guidey : float
+            pixels to guide in y direction
+
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        None
+        """
+        now = str(time.time())
+        guidex = self.__shift_value.x.value
+        guidey = self.__shift_value.y.value
+
+        message = {
+            "Event": "DonutsRecenterInformation",
+            "Timestamp": now,
+            "Host": self.host,
+            "Inst": self.inst,
+            "GuideX": guidex,
+            "GuideY": guidey,
+        }
 
         # send the command
         msg_str = json.dumps(message) + "\r\n"
