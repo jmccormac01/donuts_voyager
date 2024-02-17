@@ -475,6 +475,14 @@ class Voyager():
         self.n_images_to_stabilise = config['n_images_to_stabilise']
         # initialise stabilisation counter
         self._images_to_stabilise = self.n_images_to_stabilise
+        # initialise the stabilised pixel shift limit
+        # once initial shifts are less than this limit, guiding is considered stabilised
+        try:
+            self.stabilised_pixel_shift = config['stabilised_pixel_shift']
+        except KeyError:
+            # older configs might be missing this, so default back to 2
+            self.stabilised_pixel_shift = 2
+            logging.info("Defaulting to stabilised_pixel_shift=2, check latest config files on github for new settings")
 
         # calibrated pixels to time ratios and the directions
         # new in GEM support, set these later once we know mount_type | flip status
@@ -2017,7 +2025,7 @@ class Voyager():
             pre_pid_y = shift_y
 
         # handle stabilisation
-        if not self._stabilised and pre_pid_x < 2 and pre_pid_y < 2:
+        if not self._stabilised and pre_pid_x < self.stabilised_pixel_shift and pre_pid_y < self.stabilised_pixel_shift:
             # set flag
             self._stabilised = True
             # reset the number of images to stabilise for next time
@@ -2029,13 +2037,13 @@ class Voyager():
             # reset the guide buffer
             self.__initialise_guide_buffer()
         # continue trying to stabilise
-        elif not self._stabilised and (pre_pid_x > 2 or pre_pid_y > 2) and self._images_to_stabilise >= 0:
+        elif not self._stabilised and (pre_pid_x > self.stabilised_pixel_shift or pre_pid_y > self.stabilised_pixel_shift) and self._images_to_stabilise >= 0:
             # keep forcing 100% proportional correction
             self.__initialise_pid_loop(stabilised=False)
             self._images_to_stabilise -= 1
         # check if we've been trying to stabilise for too long
-        elif not self._stabilised and (pre_pid_x > 2 or pre_pid_y > 2) and self._images_to_stabilise < 0:
-            logging.error(f"We've been trying to stabilise >{self.n_images_to_stabilise} images")
+        elif not self._stabilised and (pre_pid_x > self.stabilised_pixel_shift or pre_pid_y > self.stabilised_pixel_shift) and self._images_to_stabilise < 0:
+            logging.error(f"We've been trying to stabilise to <{self.stabilised_pixel_shift} pixels for >{self.n_images_to_stabilise} images")
             logging.error("There appears to be an error, quiting donuts")
             self.__send_donuts_message_to_voyager("DonutsRecenterError", "Failed to stabilise guiding")
             sys.exit(ERROR_STABILISE)

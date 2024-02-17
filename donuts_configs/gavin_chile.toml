@@ -62,6 +62,7 @@ guide_buffer_length = 20
 guide_buffer_sigma = 10
 max_error_pixels = 20
 n_images_to_stabilise = 10
+stabilised_pixel_shift = 2
 pid_coeffs.x.p=0.75
 pid_coeffs.x.i=0.02
 pid_coeffs.x.d=0.0
