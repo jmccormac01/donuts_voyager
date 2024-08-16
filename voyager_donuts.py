@@ -1171,12 +1171,15 @@ class Voyager():
 
         # check if there is any overflow from last time
         logging.debug(f"Message overflow {self.message_overflow}")
-        for msg in self.message_overflow:
-            logging.debug(f"Moving {msg} to __receive_until_delim message_buffer...")
-            message_buffer.append(msg)
+
+        if self.message_overflow:
+            logging.debug(f"Moving {self.message_overflow} to __receive_until_delim initial_message_raw...")
+            initial_message_raw = self.message_overflow
+        else:
+            initial_message_raw = b''
 
         # reset the overflow
-        self.message_overflow = []
+        self.message_overflow = b''
         logging.debug(f"Reset message overflow to {self.message_overflow}")
 
         continue_reading = True
@@ -1186,24 +1189,28 @@ class Voyager():
             # seen issues with spamming thousands of [b'', b'' ...]
             if len(message_buffer) > 10 or len(self.message_overflow) > 10:
                 logging.fatal("Problem with receive_until_delim, exiting")
-                logging.fatal(f"meassge_buffer: {message_buffer}")
-                logging.fatal(f"meassge_overflow: {self.message_overflow}")
+                logging.fatal(f"message_buffer: {message_buffer}")
+                logging.fatal(f"message_overflow: {self.message_overflow}")
                 sys.exit(ERROR_UNHANDLED)
             # read the socket
             try:
-                message_raw = self.socket.recv(n_bytes)
+                message_raw = initial_message_raw + self.socket.recv(n_bytes)
             except s.timeout:
-                message_raw = b''
+                message_raw = initial_message_raw + b''
             logging.debug(f"Message raw {message_raw}")
+
+            if message_raw == b'':
+                continue
 
             if delim in message_raw:
                 logging.debug("DELIM FOUND...")
                 continue_reading = False
-                message_end, message_new_start = message_raw.split(b'\r\n')
+                message_parts = message_raw.split(b'\r\n', 1)
+                message_end, message_new_start = message_raw.split(b'\r\n', 1)
                 logging.debug(f"Message raw parts {message_end} : {message_new_start}")
                 message_buffer.append(message_end)
                 logging.debug(f"Message buffer: {message_buffer}")
-                self.message_overflow.append(message_new_start)
+                self.message_overflow += message_new_start
                 logging.debug(f"Message overflow: {self.message_overflow}")
 
             else:
