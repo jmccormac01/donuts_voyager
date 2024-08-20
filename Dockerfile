@@ -7,7 +7,7 @@ ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
 RUN chmod +x /tini
 
 # set the timezone for the current installation
-RUN echo "Australia/NSW" > /etc/timezone
+RUN echo ${TZ} > /etc/timezone
 RUN dpkg-reconfigure -f noninteractive tzdata
 
 # keep setup tools up to date
@@ -37,4 +37,4 @@ USER donuts
 ENTRYPOINT ["/tini", "--"]
 
 # start the code once the container is running
-CMD python voyager_donuts.py donuts_configs/gavin_sso.toml
+CMD python voyager_donuts.py ${TOML_FILE}

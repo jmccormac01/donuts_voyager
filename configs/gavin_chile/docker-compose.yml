@@ -13,18 +13,19 @@ services:
       TZ: "America/Santiago"
     volumes:
       - mysql-data:/var/lib/mysql
-      - ./mysql-init.sql:/docker-entrypoint-initdb.d/mysql-init.sql
+      - ../../mysql-init.sql:/docker-entrypoint-initdb.d/mysql-init.sql
     network_mode: "host"
 
   voyager_donuts:
     container_name: voyager_donuts
     build:
-      context: .
+      context: ../../
       dockerfile: Dockerfile
     image: voyager_donuts
     network_mode: "host"
     environment:
       TZ: "America/Santiago"
+      TOML_FILE: "gavin_chile.toml"
     volumes:
       - z:/RAW/DonutsCalibration:/voyager_calibration
       - z:/RAW/DonutsLog:/voyager_log

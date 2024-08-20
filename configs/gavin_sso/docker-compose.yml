@@ -13,18 +13,19 @@ services:
       TZ: "Australia/NSW"
     volumes:
       - mysql-data:/var/lib/mysql
-      - ./mysql-init.sql:/docker-entrypoint-initdb.d/mysql-init.sql
+      - ../../mysql-init.sql:/docker-entrypoint-initdb.d/mysql-init.sql
     network_mode: "host"
 
   voyager_donuts:
     container_name: voyager_donuts
     build:
-      context: .
+      context: ../../
       dockerfile: Dockerfile
     image: voyager_donuts
     network_mode: "host"
     environment:
       TZ: "Australia/NSW"
+      TOML_FILE: "gavin_sso.toml"
     volumes:
       - c:/Users/itelescope/Dropbox/MoanaSSO/DonutsCalibration:/voyager_calibration
       - c:/Users/itelescope/Dropbox/MoanaSSO/DonutsLog:/voyager_log
